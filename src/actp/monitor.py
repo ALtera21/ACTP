@@ -66,8 +66,7 @@ class CutLossMonitor:
             if state == "WAITING":
                 events.append(Event(
                     "warn",
-                    f"{side} Cut Loss breached. Needs {_NEEDS} to close."
-                    f"{CUT_LOSS_HOLD_SECONDS}s and STOP CUT LOSS to close.",
+                    f"{side} Cut Loss breached. Needs {_NEEDS} to close.",
                 ))
             elif state == "HOLDING":
                 events.append(Event(

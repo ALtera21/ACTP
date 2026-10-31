@@ -47,6 +47,8 @@ RISK_TEXT = (
     "Continue?"
 )
 
+class AccountNotSupported(Exception):
+    """The logged-in account cannot run ACTP."""
 
 def setup_file_log() -> logging.Logger:
     """One file per day (kept 30 days)."""
@@ -102,6 +104,12 @@ def check_against_broker(symbol: str, lot: Decimal) -> str | None:
         return f"The MetaTrader5 package could not be loaded: {exc}"
     if not mt5.initialize():
         return "MT5 is not reachable. Open MT5, log in, and try again."
+    account = mt5.account_info()
+    if (
+        account is not None
+        and account.margin_mode != mt5.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING
+    ):
+        return "This is not a HEDGING account. ACTP needs a hedging account."
     mt5.symbol_select(symbol, True)
     info = mt5.symbol_info(symbol)
     if info is None:
@@ -262,6 +270,19 @@ def make_manager() -> tuple[ExecutionManager, Any, str, bool]:
     broker = Mt5Broker()
     broker.connect()
     account = mt5.account_info()
+    if (
+        account is not None
+        and account.margin_mode != mt5.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING
+    ):
+        broker.shutdown()
+        raise AccountNotSupported(
+            "This account is not a HEDGING account.\n\n"
+            "ACTP places several orders per side. On a netting account "
+            "they merge into one position, which breaks Cut Loss and "
+            "the close buttons.\n\n"
+            "Open (or ask your broker for) a hedging account, then start "
+            "ACTP again."
+        )
     is_real = account is None or account.trade_mode != mt5.ACCOUNT_TRADE_MODE_DEMO
     if account is None:
         banner = "LIVE - REAL MONEY"
@@ -661,6 +682,8 @@ def main() -> None:
         return
     try:
         manager, broker, banner, is_real = make_manager()
+    except AccountNotSupported as exc:
+        fatal(str(exc))
     except (BrokerError, RuntimeError, ImportError) as exc:
         fatal(
             f"Cannot start: {exc}\n\nOpen MetaTrader 5, log in, turn on "
