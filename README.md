@@ -1,159 +1,165 @@
+🇬🇧 [English](README.gb.md)
+
 # ACTP – Auto Copy Trade Plan
 
-ACTP places a layered set of MT5 pending orders from a trade plan you paste in, and manages them afterwards (Cut Loss, close buttons, Auto-TP). It never reads WhatsApp for you: you copy and paste each message.
+ACTP memasang serangkaian pending order berlapis di MT5 berdasarkan rencana trading yang Anda tempelkan, lalu mengelolanya setelah itu (Cut Loss, tombol penutupan, Auto-TP). ACTP tidak membaca WhatsApp secara otomatis: Anda harus menyalin dan menempelkan setiap pesan secara manual.
 
 > [!WARNING]
-> ACTP places **real orders** on the MetaTrader 5 account that is logged in and can lose money. It comes with **NO WARRANTY** (see the LICENSE file). It is not financial advice and is not affiliated with any signal provider, WhatsApp, MetaQuotes or any broker. You are responsible for every order. Test on a demo account first.
+> ACTP memasang **order sungguhan** pada akun MetaTrader 5 yang sedang login dan dapat menyebabkan kerugian. ACTP diberikan **TANPA JAMINAN APA PUN** (lihat file LICENSE). ACTP bukan nasihat keuangan dan tidak berafiliasi dengan penyedia sinyal, WhatsApp, MetaQuotes, atau broker mana pun. Anda bertanggung jawab atas setiap order. Uji terlebih dahulu menggunakan akun demo.
 
-## 💻 Requirements
+## 💻 Persyaratan
 
-Before installing ACTP, make sure you have:
+Sebelum memasang ACTP, pastikan Anda memiliki:
 
-- Windows 10 or Windows 11 (64-bit).
-- MetaTrader 5 desktop terminal.
-- A hedging MT5 account. On a netting account the layers of one side merge into a single position. ACTP refuses to start on a netting account.
-- Algo Trading switched ON in the MT5 toolbar.
-- MT5 must be open and logged in whenever ACTP runs.
-- Your broker offers an XAUUSD symbol (XAUUSD, XAUUSDc, XAUUSDm, XAUUSD.r and so on).
+- Windows 10 atau Windows 11 (64-bit).
+- Terminal desktop MetaTrader 5.
+- Akun MT5 bertipe hedging. Pada akun netting, layer dari satu sisi akan digabung menjadi satu posisi. ACTP tidak akan berjalan pada akun netting.
+- Algo Trading dalam keadaan AKTIF pada toolbar MT5.
+- MT5 harus tetap terbuka dan sudah login selama ACTP digunakan.
+- Broker Anda menyediakan simbol XAUUSD (XAUUSD, XAUUSDc, XAUUSDm, XAUUSD.r, dan sebagainya).
 
-## 📥 Download
+## 📥 Unduh
 
-Download the latest ACTP release from the official GitHub Releases page:
+Unduh rilis ACTP terbaru dari halaman GitHub Releases resmi:
 
-**[CLICK HERE TO DOWNLOAD ACTP – LATEST RELEASE](https://github.com/ALtera21/ACTP/releases/download/v1.0.1/dist.zip)**
+**[KLIK DI SINI UNTUK MENGUNDUH ACTP – RILIS TERBARU](https://github.com/ALtera21/ACTP/releases/download/v1.0.1/dist.zip)**
 
-1. Download the provided `.zip` file under **Assets**.
-2. Extract the ZIP file to your preferred directory.
-3. Run `ACTP.exe` from the extracted folder. Keep it together with the `_internal` folder; do not move the exe elsewhere or run it from inside the ZIP.
+1. Unduh file `.zip` yang tersedia di bagian **Assets**.
+2. Ekstrak ZIP ke direktori yang Anda inginkan.
+3. Jalankan `ACTP.exe` dari folder hasil ekstraksi. Biarkan file tersebut tetap berada bersama folder `_internal`; jangan pindahkan file exe ke lokasi lain atau menjalankannya langsung dari dalam file ZIP.
 
-> **Note:** Windows SmartScreen may warn about an unsigned app: “More info → Run anyway”. PyInstaller exes also trigger antivirus false positives.
+> **Catatan:** Windows SmartScreen mungkin menampilkan peringatan karena aplikasi belum ditandatangani: pilih “More info → Run anyway”. File exe PyInstaller juga dapat memicu deteksi antivirus yang keliru (false positive).
 
-Example:
+Contoh:
 
 ```text
 C:\ACTP
 ```
 
-**Verify your download (v1.0.1):** in PowerShell run
+**Verifikasi file unduhan (v1.0.1):** jalankan perintah berikut di PowerShell:
+
 ```powershell
 Get-FileHash .\dist.zip -Algorithm SHA256
 ```
-and compare with: `4bde5ce45219f045849a0242b31b9d43617ad859e1848a86d278ea16441364ac`
 
-## 🚀 ACTP setup
+Lalu bandingkan hasilnya dengan: `4bde5ce45219f045849a0242b31b9d43617ad859e1848a86d278ea16441364ac`
 
-1. Open MetaTrader 5, log in, and switch **Algo Trading** ON.
-2. Double-click `ACTP.exe`.
-3. **First start only:** read the risk notice and click OK. The Settings window opens:
-   - Pick your broker's XAUUSD symbol (**Detect from MT5** fills the list).
-   - Set the lot per order.
-   - Choose your Cut Loss options (see below).
-   - Click **Save**. ACTP restarts by itself.
-4. The window banner shows which account you're on: **red = REAL MONEY**, **green = DEMO**. Try a demo account first.
-5. Copy a trade plan from WhatsApp, paste it into the box, click **Send**, read the summary, and confirm.
+## 🚀 Pengaturan ACTP
 
-Your settings, logs and saved plans are in `%APPDATA%\ACTP` (`settings.json`, `logs\`, `state\`). To uninstall, delete the ACTP folder and `%APPDATA%\ACTP`.
+1. Buka MetaTrader 5, login, lalu aktifkan **Algo Trading**.
+2. Klik dua kali `ACTP.exe`.
+3. **Hanya saat pertama kali dijalankan:** baca pemberitahuan risiko lalu klik OK. Jendela Settings akan terbuka:
+   - Pilih simbol XAUUSD milik broker Anda (**Detect from MT5** akan mengisi daftar secara otomatis).
+   - Atur lot untuk setiap order.
+   - Pilih opsi Cut Loss (lihat penjelasan di bawah).
+   - Klik **Save**. ACTP akan memulai ulang secara otomatis.
+4. Banner pada jendela menunjukkan jenis akun yang sedang digunakan: **merah = UANG SUNGGUHAN**, **hijau = DEMO**. Cobalah terlebih dahulu menggunakan akun demo.
+5. Salin rencana trading dari WhatsApp, tempelkan ke kotak teks, klik **Send**, periksa ringkasannya, lalu konfirmasikan.
 
-**Important:** settings can only be saved while MT5 is open, because ACTP checks the symbol and lot against your broker.
+Pengaturan, log, dan rencana yang tersimpan berada di `%APPDATA%\ACTP` (`settings.json`, `logs\`, `state\`). Untuk menghapus ACTP, hapus folder ACTP dan `%APPDATA%\ACTP`.
 
-## 🖥️ Using ACTP
+**Penting:** pengaturan hanya dapat disimpan ketika MT5 sedang terbuka karena ACTP perlu memeriksa simbol dan lot berdasarkan batasan broker Anda.
 
-### Messages ACTP understands
+## 🖥️ Menggunakan ACTP
 
-| Message | What ACTP does |
+### Pesan yang dapat diproses ACTP
+
+| Pesan | Tindakan ACTP |
 |---|---|
-| `PLAN XAUUSDr` with BUY LIMIT and/or SELL LIMIT sections | Replaces the current plan on those sides and places one pending order per layer. |
-| `UPDATE XAUUSDr BUY\|SELL` with `SL: a ➜ b` and/or `TP: a ➜ b` | Changes SL/TP on that side's orders. |
-| `CLOSE XAUUSDr BUY\|SELL` | Closes the **open positions** of that side. Pending orders of that side stay. |
-| `XAUUSDr BUY\|SELL - Entry ter-fill` | Noted only. Nothing is sent. |
+| `PLAN XAUUSDr` dengan bagian BUY LIMIT dan/atau SELL LIMIT | Mengganti rencana yang sedang aktif pada sisi tersebut dan memasang satu pending order untuk setiap layer. |
+| `UPDATE XAUUSDr BUY\|SELL` dengan `SL: a ➜ b` dan/atau `TP: a ➜ b` | Mengubah SL/TP pada order di sisi tersebut. |
+| `CLOSE XAUUSDr BUY\|SELL` | Menutup **posisi yang sudah terbuka** pada sisi tersebut. Pending order di sisi tersebut tetap aktif. |
+| `XAUUSDr BUY\|SELL - Entry ter-fill` | Hanya dicatat. Tidak ada order yang dikirim. |
 
-Limits: 2 to 20 layers per side, at most 12 orders per plan, prices with 2 decimals. Pasting the identical text twice within 30 seconds is refused.
+Batasan: 2 hingga 20 layer per sisi, maksimal 12 order untuk setiap rencana, dan harga harus menggunakan 2 angka desimal. Teks yang sama persis dan ditempelkan dua kali dalam rentang 30 detik akan ditolak.
 
-### Window controls
+### Kontrol jendela
 
-| Control | What it does |
+| Kontrol | Fungsi |
 |---|---|
-| **Paste box** | Where you paste the message. |
-| **Send** | Parses the message, shows a summary (including how many layers would fill at market right now), and sends it after you confirm. |
-| **Clear** | Empties the paste box. |
-| **Settings...** | Opens the settings window. Changes apply after a restart (ACTP offers one). |
-| **Reconcile (clear halt)** | After a failed operation ACTP stops (status shows HALTED). Check MT5, press this to re-read it, then Send the same message again to resume. (Think of this as a refresh button)|
-| **KILL ALL** | Cancels every pending ACTP order and closes every open ACTP position. Asks to confirm. |
-| **Close all positions** | Closes open positions only. Pending orders stay. |
-| **Close profitable only** | Closes only the positions currently in profit. Spread is counted; swap and commission are not. |
-| **Auto-TP** checkbox | When every layer of a side is filled, moves that side's TP to its first entry a.k.a the `proximal` (BUY: the highest layer, SELL: the lowest). Once per plan and side. Starts OFF every time ACTP starts. |
+| **Paste box** | Tempat Anda menempelkan pesan. |
+| **Send** | Memproses pesan, menampilkan ringkasan (termasuk jumlah layer yang akan terisi pada harga pasar saat ini), lalu mengirimkannya setelah Anda mengonfirmasi. |
+| **Clear** | Mengosongkan kotak teks. |
+| **Settings...** | Membuka jendela pengaturan. Perubahan akan diterapkan setelah ACTP dimulai ulang (ACTP akan menawarkan untuk melakukannya). |
+| **Reconcile (clear halt)** | Setelah operasi gagal, ACTP akan berhenti (status menunjukkan HALTED). Periksa MT5, tekan tombol ini untuk membaca ulang kondisi akun, lalu kirim ulang pesan yang sama untuk melanjutkan. (Anggap saja tombol ini sebagai tombol refresh.) |
+| **KILL ALL** | Membatalkan semua pending order ACTP dan menutup semua posisi ACTP yang terbuka. Tindakan ini memerlukan konfirmasi. |
+| **Close all positions** | Hanya menutup posisi yang terbuka. Pending order tetap aktif. |
+| **Close profitable only** | Hanya menutup posisi yang sedang menghasilkan profit. Spread diperhitungkan; swap dan komisi tidak diperhitungkan. |
+| Kotak centang **Auto-TP** | Ketika semua layer pada suatu sisi sudah terisi, TP sisi tersebut dipindahkan ke harga entry pertama atau `proximal` (BUY: layer tertinggi, SELL: layer terendah). Dilakukan satu kali untuk setiap rencana dan sisi. Fitur ini selalu NONAKTIF setiap kali ACTP dijalankan. |
 
 > [!NOTE]
-> ACTP only touches orders it placed. Your own manual trades are never modified.
+> ACTP hanya mengelola order yang dipasangnya sendiri. Transaksi manual Anda tidak akan diubah.
 
 <p align="center">
-  <img src="docs\main-screen.png" width="400" alt="Project Dashboard">
+  <img src="docs\main-screen.png" width="400" alt="Dasbor utama">
 </p>
 
 <p align="center">
-  <img src="docs\halted.png" width="400" alt="Error halted, press reconcile button">
+  <img src="docs\halted.png" width="400" alt="Terjadi kesalahan dan sistem berhenti; tekan tombol Reconcile">
 </p>
 
-### Late plans
+### Rencana yang terlambat
 
-If you paste a plan after price has already moved into it, layers whose entry is already reached are bought **at market** instead of failing. The Send summary shows the split. The plan is refused when:
-- more layers than **Max layers at market per side** would fill at market, or
-- price is already through that side's Cut Loss or SL.
+Jika Anda menempelkan rencana setelah harga bergerak masuk ke area rencana tersebut, layer yang harga entry-nya sudah terlewati akan dibeli **pada harga pasar (market)**, bukan ditolak. Ringkasan pada tombol Send menunjukkan pembagian layer tersebut. Rencana akan ditolak jika:
+
+- Jumlah layer yang akan terisi pada harga pasar melebihi **Max layers at market per side**, atau
+- Harga sudah melewati Cut Loss atau SL pada sisi tersebut.
 
 ### Cut Loss
 
-With **Auto cut loss** on, ACTP closes a whole side (cancels pending, closes open) when:
-1. price (BUY: bid, SELL: ask) stays beyond the plan's Cut Loss for the **hold time** without interruption, **and**
-2. with **SCL** on, price is also at or beyond the Stop Cut Loss line at that moment.
+Jika **Auto cut loss** aktif, ACTP akan menutup seluruh order pada satu sisi (membatalkan pending order dan menutup posisi yang terbuka) ketika:
 
-SCL sits between the Cut Loss and the SL, at the chosen percentage of the way from Cut Loss to SL. A gap of more than 15 seconds between price checks restarts the timer. With auto cut loss **off**, nothing closes a side automatically: only the broker's SL/TP, KILL ALL, or you.
+1. Harga (BUY: bid, SELL: ask) tetap berada di luar batas Cut Loss pada rencana selama **hold time** tanpa terputus, **dan**
+2. Jika **SCL** aktif, harga juga harus sudah mencapai atau melewati garis Stop Cut Loss pada saat itu.
 
-**Cut Loss and Auto-TP only run while the ACTP window is open.** Closing it asks for confirmation, because monitoring stops. Orders keep their SL/TP at the broker.
+SCL berada di antara Cut Loss dan SL, pada persentase jarak yang dipilih dari Cut Loss menuju SL. Jika jeda antara pemeriksaan harga lebih dari 15 detik, timer akan dimulai ulang. Jika Auto cut loss **nonaktif**, tidak ada sisi yang akan ditutup secara otomatis: penutupan hanya dilakukan oleh SL/TP broker, KILL ALL, atau oleh Anda sendiri.
 
-## 📋 Trading Configuration
+**Cut Loss dan Auto-TP hanya berjalan selama jendela ACTP tetap terbuka.** Saat Anda menutup jendela, ACTP akan meminta konfirmasi karena pemantauan akan berhenti. Order tetap memiliki SL/TP yang tersimpan di broker.
 
-Set these in **Settings...**. Defaults are shown.
+## 📋 Konfigurasi Trading
 
-| Setting | Default | Allowed | Meaning |
+Atur opsi berikut melalui **Settings...**. Nilai bawaan ditampilkan di bawah ini.
+
+| Pengaturan | Bawaan | Nilai yang diizinkan | Keterangan |
 |---|---|---|---|
-| XAUUSD symbol | `XAUUSDc` | Any XAUUSD variant (`XAUUSD`, `XAUUSDm`, `XAUUSD.r`, ...) | The only symbol ACTP will trade. Messages always say `XAUUSDr`; that is the provider's name, not yours. |
-| Lot per order | 0.01 | 0.01 to 10, steps of 0.01 | Volume of each layer. Must fit your broker's limits. |
-| Max layers at market per side | 3 | 0 to 12 | See "Late plans". |
-| Auto cut loss | On | On / Off | See "Cut Loss". |
-| Hold time | 60 s | 10 to 3600 | How long a Cut Loss breach must last. |
-| SCL | On | On / Off | Price must also reach the Stop Cut Loss line. |
-| SCL distance | 15 % | 5 to 95 | How far from Cut Loss toward SL the SCL line sits. |
+| Simbol XAUUSD | `XAUUSDc` | Varian XAUUSD apa pun (`XAUUSD`, `XAUUSDm`, `XAUUSD.r`, ...) | Satu-satunya simbol yang akan ditransaksikan ACTP. Pesan selalu menggunakan `XAUUSDr`; itu adalah nama simbol dari penyedia sinyal, bukan nama simbol broker Anda. |
+| Lot per order | 0.01 | 0.01 hingga 10, kelipatan 0.01 | Volume untuk setiap layer. Harus sesuai dengan batasan broker Anda. |
+| Max layers at market per side | 3 | 0 hingga 12 | Lihat bagian "Rencana yang terlambat". |
+| Auto cut loss | Aktif | Aktif / Nonaktif | Lihat bagian "Cut Loss". |
+| Hold time | 60 dtk | 10 hingga 3600 | Durasi pelanggaran batas Cut Loss yang harus berlangsung sebelum tindakan dilakukan. |
+| SCL | Aktif | Aktif / Nonaktif | Harga juga harus mencapai garis Stop Cut Loss. |
+| SCL distance | 15% | 5 hingga 95 | Jarak garis SCL dari Cut Loss menuju SL, dalam persentase. |
 
-Your symbol must have at least 2 price decimals.
+Simbol Anda harus mendukung setidaknya 2 angka desimal pada harga.
 
 <p align="center">
-  <img src="docs\settings.png" width="400" alt="Error halted, press reconcile button">
+  <img src="docs\settings.png" width="400" alt="Jendela pengaturan">
 </p>
 
-> **Note:**
-The lot size advertised in the original WhatsApp trading plan is ignored. ACTP uses its own configured volume.
+> **Catatan:**
+> Ukuran lot yang tercantum dalam rencana trading WhatsApp asli akan diabaikan. ACTP menggunakan volume yang Anda atur sendiri.
 
-## ⚠️ Important Notes
+## ⚠️ Catatan Penting
 
-- ACTP has no dry-run mode. Test on a demo account first, one copy per account, keep PC awake and window open, check banner and server, risks are yours.
-- Ensure your MT5 terminal is connected to the correct trading account.
-- Never use an unverified release for live trading.
-- Trading involves financial risk. You are responsible for configuring and monitoring your trading environment.
+- ACTP tidak memiliki mode dry-run. Uji terlebih dahulu menggunakan akun demo, jalankan satu salinan ACTP untuk setiap akun, pastikan PC tidak masuk mode tidur dan jendela ACTP tetap terbuka, periksa banner serta server, dan pahami bahwa semua risiko menjadi tanggung jawab Anda.
+- Pastikan terminal MT5 terhubung ke akun trading yang benar.
+- Jangan pernah menggunakan rilis yang belum diverifikasi untuk trading langsung.
+- Trading memiliki risiko finansial. Anda bertanggung jawab untuk mengatur dan memantau lingkungan trading Anda.
 
-## 🐛 Troubleshooting
+## 🐛 Pemecahan Masalah
 
-| Message | What to do |
+| Pesan | Tindakan |
 |---|---|
-| `Cannot start: ...` | Open MetaTrader 5, log in, turn on Algo Trading, then start ACTP again. |
-| `Cannot read your settings file` | Fix or delete `%APPDATA%\ACTP\settings.json`. |
-| `Status: HALTED` | Check MT5, press **Reconcile**, then Send the same message again to resume. |
-| Windows blocks the app | More info → Run anyway (see Download). |
-| This account is not a HEDGING account | Use a hedging account. Ask your broker.|
+| `Cannot start: ...` | Buka MetaTrader 5, login, aktifkan Algo Trading, lalu jalankan ACTP kembali. |
+| `Cannot read your settings file` | Perbaiki atau hapus `%APPDATA%\ACTP\settings.json`. |
+| `Status: HALTED` | Periksa MT5, tekan **Reconcile**, lalu kirim ulang pesan yang sama untuk melanjutkan. |
+| Windows memblokir aplikasi | Pilih More info → Run anyway (lihat bagian Unduh). |
+| This account is not a HEDGING account | Gunakan akun bertipe hedging. Hubungi broker Anda jika diperlukan. |
 
-**Logs:** ACTP writes one log file per day to `%APPDATA%\ACTP\logs\actp.log` (30 days kept). Paste `%APPDATA%\ACTP\logs` into the File Explorer address bar to open the folder. If you report a problem, attach the relevant lines. They contain your broker server name, order tickets and prices, so look them over before posting publicly.
+**Log:** ACTP membuat satu file log per hari di `%APPDATA%\ACTP\logs\actp.log` (menyimpan log selama 30 hari). Tempelkan `%APPDATA%\ACTP\logs` pada bilah alamat File Explorer untuk membuka folder tersebut. Jika Anda melaporkan masalah, sertakan baris log yang relevan. Log berisi nama server broker, tiket order, dan harga; periksa informasi tersebut sebelum membagikannya secara publik.
 
-Bugs and questions: open an issue on the GitHub repository.
+Laporkan bug dan ajukan pertanyaan melalui issue pada repositori GitHub.
 
-## 📄 License
+## 📄 Lisensi
 
-See the repository's LICENSE file for licensing and usage conditions.
+Lihat file LICENSE pada repositori untuk mengetahui ketentuan lisensi dan penggunaan.
