@@ -42,7 +42,7 @@ C:\ACTP
 Get-FileHash .\dist.zip -Algorithm SHA256
 ```
 
-Lalu bandingkan hasilnya dengan: `4bde5ce45219f045849a0242b31b9d43617ad859e1848a86d278ea16441364ac`
+Lalu bandingkan hasilnya dengan: `42f5cf081a4ec8e748606d2c1282915e576e329537cf6d98e702504822a435b8`
 
 ## 🚀 Pengaturan ACTP
 
