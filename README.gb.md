@@ -22,7 +22,7 @@ Before installing ACTP, make sure you have:
 
 Download the latest ACTP release from the official GitHub Releases page:
 
-**[CLICK HERE TO DOWNLOAD ACTP – LATEST RELEASE](https://github.com/ALtera21/ACTP/releases/download/v1.0.1/dist.zip)**
+**[CLICK HERE TO DOWNLOAD ACTP – LATEST RELEASE](https://github.com/ALtera21/ACTP/releases/download/v1.0.2/dist.zip)**
 
 1. Download the provided `.zip` file under **Assets**.
 2. Extract the ZIP file to your preferred directory.

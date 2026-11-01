@@ -22,7 +22,7 @@ Sebelum memasang ACTP, pastikan Anda memiliki:
 
 Unduh rilis ACTP terbaru dari halaman GitHub Releases resmi:
 
-**[KLIK DI SINI UNTUK MENGUNDUH ACTP – RILIS TERBARU](https://github.com/ALtera21/ACTP/releases/download/v1.0.1/dist.zip)**
+**[KLIK DI SINI UNTUK MENGUNDUH ACTP – RILIS TERBARU](https://github.com/ALtera21/ACTP/releases/download/v1.0.2/dist.zip)**
 
 1. Unduh file `.zip` yang tersedia di bagian **Assets**.
 2. Ekstrak ZIP ke direktori yang Anda inginkan.
