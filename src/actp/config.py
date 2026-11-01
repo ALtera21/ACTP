@@ -46,7 +46,4 @@ MAX_POLL_GAP_SECONDS = 15
 
 # The Cut Loss / SCL chart lines. ActpLevels.mq5 reads this file from MT5's
 # Common\\Files folder. Set to "" to turn the chart lines off.
-CHART_LEVELS_PATH = os.path.join(
-    os.environ.get("APPDATA", ""),
-    "MetaQuotes", "Terminal", "Common", "Files", "actp_levels.txt",
-) if os.environ.get("APPDATA") else ""
+CHART_LEVELS_PATH = ""
