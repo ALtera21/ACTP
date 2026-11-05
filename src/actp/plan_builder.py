@@ -2,7 +2,7 @@ from typing import Any
 
 from actp.config import LOT_PER_ORDER, SYMBOL
 from actp.price_calculator import calculate_entry_prices
-
+from actp.layers import volumes_for
 
 def build_plan_preview(plan: dict[str, Any]) -> list[dict[str, Any]]:
     """
@@ -38,7 +38,8 @@ def build_plan_preview(plan: dict[str, Any]) -> list[dict[str, Any]]:
             layers=layers,
         )
 
-        for price in prices:
+        volumes = volumes_for(side, details, LOT_PER_ORDER)
+        for price, volume in zip(prices, volumes):
             orders.append(
                 {
                     "symbol": SYMBOL,
@@ -47,7 +48,7 @@ def build_plan_preview(plan: dict[str, Any]) -> list[dict[str, Any]]:
                         "BUY_LIMIT" if side == "buy" else "SELL_LIMIT"
                     ),
                     "entry_price": price,
-                    "volume": LOT_PER_ORDER,
+                    "volume": volume,
                     "sl": details["sl"],
                     "tp": details["tp"],
                     "cut_loss": details["cut_loss"],

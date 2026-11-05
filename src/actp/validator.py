@@ -1,3 +1,4 @@
+from actp.layers import check_weights
 
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -77,6 +78,9 @@ def validate_plan(plan: dict[str, Any]) -> None:
             raise ValueError(
                 f"{side.upper()} layers must be between 2 and {MAX_LAYERS}."
             )
+
+        if details.get("weights") is not None:
+            check_weights(details["weights"], layers, side)
 
         required_fields = (
             "area_start",

@@ -29,6 +29,7 @@ from actp.dispatcher import Dispatcher
 from actp.execution import ExecutionHalted, ExecutionManager, position_in_profit
 from actp.monitor import CutLossMonitor
 from actp.plan_store import JsonPlanStore
+from actp.layers import lots_for_weights, parse_weights
 
 STATE_PATH = config.APP_DIR / "state" / "actp_state.json"
 LOG_PATH = config.APP_DIR / "logs" / "actp.log"
@@ -37,6 +38,9 @@ POLL_MS = 3000
 RED = "#b00020"
 GREEN = "#1b5e20"
 GREY = "#37474f"
+BUY_GREEN = "#2e7d32"
+SELL_RED = "#d30404"   # a lighter orange-red, so it can't be mistaken for KILL ALL (#b00020)
+VERSION = "1.1.0"
 
 RISK_TEXT = (
     "ACTP places REAL orders on whichever MetaTrader 5 account is logged in, "
@@ -126,6 +130,27 @@ def check_against_broker(symbol: str, lot: Decimal) -> str | None:
         )
     return None
 
+def check_volumes(symbol: str, lots: list[Decimal]) -> str | None:
+    """A problem description if the broker would refuse any of these lots."""
+    if not lots:
+        return None
+    try:
+        import MetaTrader5 as mt5
+    except ImportError as exc:
+        return f"The MetaTrader5 package could not be loaded: {exc}"
+    info = mt5.symbol_info(symbol)
+    if info is None:
+        return f"Cannot read {symbol} from MT5."
+    vmin = Decimal(str(info.volume_min))
+    vstep = Decimal(str(info.volume_step))
+    vmax = Decimal(str(info.volume_max))
+    for lot in sorted(set(lots)):
+        if not vmin <= lot <= vmax or (lot - vmin) % vstep != 0:
+            return (
+                f"Lot {lot} is not valid for {symbol} "
+                f"(min {vmin}, step {vstep}, max {vmax})."
+            )
+    return None
 
 class SettingsDialog:
     def __init__(self, parent: tk.Misc, on_saved, first_run: bool = False):
@@ -320,8 +345,8 @@ class App:
         self._chart = ChartLevelsWriter(config.CHART_LEVELS_PATH)
         self._chart_err_logged: str | None = None
 
-        root.title("ACTP - Auto Copy Trade Plan")
-        root.geometry("680x640")
+        root.title(f"ACTP - v{VERSION}")
+        root.geometry("680x700")
         root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         tk.Label(
@@ -332,6 +357,19 @@ class App:
             anchor="w", padx=8, pady=(8, 0))
         self.box = scrolledtext.ScrolledText(root, height=10)
         self.box.pack(fill="both", expand=True, padx=8)
+
+        multi_row = tk.Frame(root)
+        multi_row.pack(fill="x", padx=8, pady=(6, 0))
+        tk.Label(multi_row, text="MultiLayer:").pack(side="left")
+        self.multi = tk.StringVar()
+        tk.Entry(multi_row, textvariable=self.multi, width=30).pack(
+            side="left", padx=6)
+        tk.Label(multi_row, text="(blank = plan's layers, 1x each)",
+                 fg=GREY).pack(side="left")
+        self.multi_hint = tk.Label(root, anchor="w", justify="left")
+        self.multi_hint.pack(fill="x", padx=8)
+        self.multi.trace_add("write", self.update_multi_hint)
+        self.update_multi_hint()
 
         buttons = tk.Frame(root)
         buttons.pack(fill="x", padx=8, pady=6)
@@ -354,6 +392,12 @@ class App:
         tk.Button(row2, text="Close profitable only",
                   command=lambda: self.close_positions_ask(True)
                   ).pack(side="left", padx=6)
+        tk.Button(row2, text="Cancel sell orders", fg="white",
+                  bg=SELL_RED, command=lambda: self.cancel_side_ask("SELL")
+                  ).pack(side="right")
+        tk.Button(row2, text="Cancel buy orders", fg="white",
+                  bg=BUY_GREEN, command=lambda: self.cancel_side_ask("BUY")
+                  ).pack(side="right", padx=6)
 
         tp_row = tk.Frame(root)
         tp_row.pack(fill="x", padx=8)
@@ -445,6 +489,23 @@ class App:
             + (" (MIXED PLANS - check!)" if result.mixed_plans else "") + "."
         )
 
+    def update_multi_hint(self, *_args) -> None:
+        try:
+            weights = parse_weights(self.multi.get())
+            if weights is None:
+                self.multi_hint.configure(text="", fg=GREY)
+                return
+            lots = lots_for_weights(weights, config.LOT_PER_ORDER)
+        except ValueError as exc:
+            self.multi_hint.configure(text=str(exc), fg=RED)
+            return
+        self.multi_hint.configure(
+            text=f"{len(lots)} layers per side, layer 1 first: "
+                 + ", ".join(str(x) for x in lots)
+                 + f"  (total {sum(lots)} per side)",
+            fg="#e65100",
+        )
+
     def sync_chart(self) -> None:
         """Keep the Cut Loss / SCL lines on the MT5 chart current."""
         try:
@@ -479,12 +540,26 @@ class App:
         text = self.box.get("1.0", "end").strip()
         if not text:
             return
+        
         try:
-            preview = self.dispatcher.preview(text)
+            weights = parse_weights(self.multi.get())
+        except ValueError as exc:
+            self.log(f"NOT SENT: MultiLayer box: {exc}")
+            return
+        
+        try:
+            preview = self.dispatcher.preview(text, weights)
+            problem = check_volumes(
+                config.SYMBOL, self.dispatcher.lots(text, weights))
         except (ValueError, ExecutionHalted) as exc:
             self.log(f"NOT SENT: {exc}")
             self.refresh_status()
             return
+
+        if problem:
+            self.log(f"NOT SENT: {problem}")
+            return
+
         self.file_log.info("PREVIEW: %s", preview.replace("\n", " | "))
         if not messagebox.askokcancel(
             "Confirm", f"{preview}\n\nSend this to your account?"
@@ -493,7 +568,7 @@ class App:
             return
         self.log("Confirmed by user.")
         try:
-            result = self.dispatcher.dispatch(text)
+            result = self.dispatcher.dispatch(text, weights)
         except ExecutionHalted as exc:
             self.log(
                 f"HALTED: {exc}\nPress Reconcile, then Send the same message "
@@ -591,6 +666,42 @@ class App:
         else:
             self.log(f"KILL: {result['cancelled']} cancelled, "
                      f"{result['closed']} closed.")
+        finally:
+            # A half-applied plan must not be resumed by re-sending it.
+            self.dispatcher.forget_pending()
+            self.refresh_status()
+
+    def cancel_side_ask(self, side: str) -> None:
+        snap = self.manager.snapshot()
+        if "error" in snap:
+            self.log(f"MT5 read failed: {snap['error']}")
+            return
+        pending = sum(1 for o in snap["active"]
+                      if o.side == side and o.status.value == "PENDING")
+        opened = sum(1 for o in snap["active"]
+                     if o.side == side and o.status.value == "FILLED")
+        if pending == 0:
+            self.log(f"No pending {side} orders to cancel.")
+            return
+        if not messagebox.askokcancel(
+            "Cancel orders",
+            f"Cancel {pending} pending {side} order(s)?\n\n"
+            f"Open {side} positions ({opened}) are NOT touched.",
+        ):
+            return
+        try:
+            result = self.manager.cancel_pending_side(side)
+        except ExecutionHalted as exc:
+            self.log(f"CANCEL FAILED: {exc}\nCheck MT5 by hand.")
+            self.alarm()
+        except Exception as exc:
+            self.log(f"CANCEL ERROR: {exc!r}\nCheck MT5 by hand.")
+            self.alarm()
+        else:
+            self.log(
+                f"Cancel {side}: {result['cancelled']} pending cancelled, "
+                f"{result['left_open']} open positions left."
+            )
         finally:
             # A half-applied plan must not be resumed by re-sending it.
             self.dispatcher.forget_pending()

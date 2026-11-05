@@ -27,6 +27,9 @@ from typing import Any
 from actp.execution import ExecutionManager
 from actp.parser import parse_message
 from actp.broker import OrderStatus
+from decimal import Decimal
+from actp.config import LOT_PER_ORDER
+from actp.layers import apply_weights, fmt_weight, lots_by_layer
 
 DUPLICATE_WINDOW_SECONDS = 30
 
@@ -61,10 +64,13 @@ def describe(parsed: dict[str, Any]) -> str:
             if d is None:
                 continue
             total += d["layers"]
+            lots = lots_by_layer(d, LOT_PER_ORDER)
             lines.append(
                 f"{side.upper()}: {d['layers']} layers, "
                 f"area {d['area_start']} - {d['area_end']}, "
-                f"cut loss {d['cut_loss']}, SL {d['sl']}, TP {d['tp']}"
+                f"cut loss {d['cut_loss']}, SL {d['sl']}, TP {d['tp']}\n"
+                f"   lots (layer 1 first): {', '.join(str(x) for x in lots)}"
+                f"  = {sum(lots)} total"
             )
         header = f"PLAN {parsed['symbol']} - {total} pending orders"
         missing = [s.upper() for s in ("buy", "sell") if parsed[s] is None]
@@ -86,8 +92,11 @@ def describe(parsed: dict[str, Any]) -> str:
         )
     return "Fill confirmation (no action taken)"
 
-def _digest(text: str) -> str:
-    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+def _digest(text: str, weights: list[Decimal] | None = None) -> str:
+    key = text.strip()
+    if weights:
+        key += "\n#multilayer:" + ",".join(fmt_weight(w) for w in weights)
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 class Dispatcher:
     def __init__(
@@ -100,18 +109,18 @@ class Dispatcher:
         self._recent: dict[str, float] = {}
         self._pending_ids: dict[str, str] = {}
 
-    def preview(self, text: str) -> str:
-        parsed = parse_message(text)
+    def preview(self, text: str, weights: list[Decimal] | None = None) -> str:
+        parsed = apply_weights(parse_message(text), weights)
         _check_size(parsed)
         summary = describe(parsed)
         if parsed["type"] == "PLAN" and self._manager.check_stale:
-            pending_id = self._pending_ids.get(_digest(text))
+            pending_id = self._pending_ids.get(_digest(text, weights))
             check = self._manager.assess_plan(parsed, pending_id)
             summary += "\n\n" + check.describe()
         return summary
 
-    def dispatch(self, text: str) -> DispatchResult:
-        parsed = parse_message(text)
+    def dispatch(self, text: str, weights: list[Decimal] | None = None) -> DispatchResult:
+        parsed = apply_weights(parse_message(text), weights)
         _check_size(parsed)
         kind = parsed["type"]
 
@@ -123,7 +132,7 @@ class Dispatcher:
                 "read from the broker.",
             )
 
-        digest = _digest(text)
+        digest = _digest(text, weights)
         now = self._clock()
         last = self._recent.get(digest)
         if last is not None and now - last < DUPLICATE_WINDOW_SECONDS:
@@ -175,3 +184,14 @@ class Dispatcher:
     def forget_pending(self) -> None:
         """Forget half-applied plans, e.g. after the kill switch."""
         self._pending_ids.clear()
+
+    def lots(self, text: str, weights: list[Decimal] | None = None) -> list[Decimal]:
+        """Every lot size this message would send (empty if not a PLAN)."""
+        parsed = apply_weights(parse_message(text), weights)
+        if parsed["type"] != "PLAN":
+            return []
+        out: list[Decimal] = []
+        for side in ("buy", "sell"):
+            if parsed[side] is not None:
+                out += lots_by_layer(parsed[side], LOT_PER_ORDER)
+        return out
