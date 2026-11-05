@@ -7,6 +7,15 @@ ACTP places a layered set of MT5 pending orders from a trade plan you paste in, 
 > [!WARNING]
 > ACTP places **real orders** on the MetaTrader 5 account that is logged in and can lose money. It comes with **NO WARRANTY** (see the LICENSE file). It is not financial advice and is not affiliated with any signal provider, WhatsApp, MetaQuotes or any broker. You are responsible for every order. Test on a demo account first.
 
+## 🎬 Video tutorial
+
+<p align="center">
+  <a href="https://youtu.be/d0bM5Vmml2w">
+    <img src="docs\ACTP tutorial.png" width="500" alt="ACTP tutorial video">
+  </a>
+</p>
+
+
 ## 💻 Requirements
 
 Before installing ACTP, make sure you have:
@@ -22,7 +31,7 @@ Before installing ACTP, make sure you have:
 
 Download the latest ACTP release from the official GitHub Releases page:
 
-**[CLICK HERE TO DOWNLOAD ACTP – LATEST RELEASE](https://github.com/ALtera21/ACTP/releases/download/v1.0.2/dist.zip)**
+**[CLICK HERE TO DOWNLOAD ACTP – LATEST RELEASE](https://github.com/ALtera21/ACTP/releases/download/v1.1.0/dist.zip)**
 
 1. Download the provided `.zip` file under **Assets**.
 2. Extract the ZIP file to your preferred directory.
@@ -36,11 +45,11 @@ Example:
 C:\ACTP
 ```
 
-**Verify your download (v1.0.1):** in PowerShell run
+**Verify your download (v1.1.0):** in PowerShell run
 ```powershell
 Get-FileHash .\dist.zip -Algorithm SHA256
 ```
-and compare with: `42f5cf081a4ec8e748606d2c1282915e576e329537cf6d98e702504822a435b8`
+and compare with: `6b106a8917b86770f9ac3955bbe26cf7a21a169a882cd6383a269bd817f5a16c`
 
 ## 🚀 ACTP setup
 
@@ -76,6 +85,7 @@ Limits: 2 to 20 layers per side, at most 12 orders per plan, prices with 2 decim
 | Control | What it does |
 |---|---|
 | **Paste box** | Where you paste the message. |
+| **MultiLayer** box | Optional. Sets the lot of each layer and the number of layers for the plan you send next (see "MultiLayer" below). Blank = the plan's own layer count, one base lot each. |
 | **Send** | Parses the message, shows a summary (including how many layers would fill at market right now), and sends it after you confirm. |
 | **Clear** | Empties the paste box. |
 | **Settings...** | Opens the settings window. Changes apply after a restart (ACTP offers one). |
@@ -83,6 +93,7 @@ Limits: 2 to 20 layers per side, at most 12 orders per plan, prices with 2 decim
 | **KILL ALL** | Cancels every pending ACTP order and closes every open ACTP position. Asks to confirm. |
 | **Close all positions** | Closes open positions only. Pending orders stay. |
 | **Close profitable only** | Closes only the positions currently in profit. Spread is counted; swap and commission are not. |
+| **Cancel buy orders** / **Cancel sell orders** | Cancels the **pending** orders of that side only. Open positions stay open and keep their SL/TP and Cut Loss protection. Asks to confirm and shows how many orders will be cancelled. Does not run while HALTED: press Reconcile first. |
 | **Auto-TP** checkbox | When every layer of a side is filled, moves that side's TP to its first entry a.k.a the `proximal` (BUY: the highest layer, SELL: the lowest). Once per plan and side. Starts OFF every time ACTP starts. |
 
 > [!NOTE]
@@ -95,6 +106,29 @@ Limits: 2 to 20 layers per side, at most 12 orders per plan, prices with 2 decim
 <p align="center">
   <img src="docs\halted.png" width="400" alt="Error halted, press reconcile button">
 </p>
+
+### MultiLayer
+
+The **MultiLayer** box under the paste box lets you choose the size of every layer, and how many layers there are, for the next plan you send. Type one number per layer, for example `1, 1, 1, 1, 2, 2`. Each number multiplies the **Lot per order** from Settings (the base lot).
+
+| Base lot | MultiLayer | Result |
+|---|---|---|
+| 0.06 | `1, 1, 1, 1, 2, 2` | 6 layers: 0.06 x 4, then 0.12 x 2 |
+| 0.06 | `1, 1, 1, 2` | 4 layers: 0.06 x 3, then 0.12 x 1 |
+
+<p align="center">
+  <img src="docs/multilayer.gif" width="500" alt="Typing a MultiLayer list and seeing the lot of each layer">
+</p>
+
+- **Layer 1 is the first price the market reaches** (BUY: the highest entry, SELL: the lowest entry). The larger lots in the examples above are the deepest layers.
+- The list sets the layer count too. ACTP spreads that many layers evenly across the plan's area, whatever number of layers the message says.
+- **Leave the box blank** to work as before: the message's layer count, one base lot each.
+- The same list is used for BUY and SELL. It is ignored by UPDATE and CLOSE messages.
+- Use 2 to 12 numbers, each above 0 and at most 10. Decimals such as `1.5` are fine if the resulting lot is a multiple of 0.01. The total of 12 orders per plan still applies, so a list of more than 6 numbers only works on a one-sided plan.
+- The Send summary lists the lot of every layer and the total per side. ACTP also checks the lots against your broker's minimum, step and maximum before anything is sent.
+- The box is **not saved** and is **not cleared after Send**. While it is filled, an orange line below it shows the lots that will be used.
+- If a plan is interrupted (HALTED), Send the same message again with the **same** MultiLayer value to resume it. A different value starts a new plan.
+- **Max layers at market per side** counts layers, not lots, so a larger layer counts the same as a small one.
 
 ### Late plans
 
@@ -119,7 +153,7 @@ Set these in **Settings...**. Defaults are shown.
 | Setting | Default | Allowed | Meaning |
 |---|---|---|---|
 | XAUUSD symbol | `XAUUSDc` | Any XAUUSD variant (`XAUUSD`, `XAUUSDm`, `XAUUSD.r`, ...) | The only symbol ACTP will trade. Messages always say `XAUUSDr`; that is the provider's name, not yours. |
-| Lot per order | 0.01 | 0.01 to 10, steps of 0.01 | Volume of each layer. Must fit your broker's limits. |
+| Lot per order | 0.01 | 0.01 to 10, steps of 0.01 | Volume of each layer (the base lot that MultiLayer multiplies). Must fit your broker's limits. |
 | Max layers at market per side | 3 | 0 to 12 | See "Late plans". |
 | Auto cut loss | On | On / Off | See "Cut Loss". |
 | Hold time | 60 s | 10 to 3600 | How long a Cut Loss breach must last. |
