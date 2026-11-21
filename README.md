@@ -1,4 +1,4 @@
-🇬🇧 [English](README_gb.md)
+🇬🇧 [English](README.gb.md)
 
 # ACTP – Auto Copy Trade Plan
 
