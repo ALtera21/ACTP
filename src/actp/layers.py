@@ -17,7 +17,7 @@ from typing import Any
 
 MAX_WEIGHT = Decimal("10")
 MIN_LAYERS = 2
-MAX_LAYERS = 12
+MAX_LAYERS = 200
 LOT_STEP = Decimal("0.01")
 
 
@@ -88,6 +88,55 @@ def lots_for_weights(weights: list[Decimal], base_lot: Decimal) -> list[Decimal]
             )
         lots.append(lot.quantize(LOT_STEP))
     return lots
+
+
+def parse_layer_amount(text: Any) -> int:
+    """The Layer amount box: a whole number from MIN_LAYERS to MAX_LAYERS."""
+    raw = str(text).strip()
+    if not raw.isdigit():
+        raise ValueError("Layer amount must be a whole number.")
+    value = int(raw)
+    if not MIN_LAYERS <= value <= MAX_LAYERS:
+        raise ValueError(
+            f"Layer amount must be between {MIN_LAYERS} and {MAX_LAYERS}."
+        )
+    return value
+
+
+def resolve_weights(
+    multi_text: str, layer_amount: Any, presets: dict[str, str]
+) -> list[Decimal]:
+    """What the main window sends. The MultiLayer box wins when it has
+    numbers. When it is empty the Layer amount decides: the saved preset for
+    that amount if there is one, otherwise 1x for every layer."""
+    typed = parse_weights(multi_text)
+    if typed is not None:
+        return typed
+    amount = parse_layer_amount(layer_amount)
+    preset = presets.get(str(amount))
+    if not preset or not preset.strip():
+        return [Decimal(1)] * amount
+    weights = parse_weights(preset)
+    if weights is None or len(weights) != amount:
+        raise ValueError(
+            f"The saved MultiLayer for {amount} layers does not have "
+            f"{amount} numbers. Fix it in Settings."
+        )
+    return weights
+
+
+def summarize_lots(lots: list[Decimal]) -> str:
+    """'0.01, 0.01, 0.02' for short lists; '100 x 0.01, 50 x 0.02' for long
+    ones. Layer 1 first."""
+    if len(lots) <= 12:
+        return ", ".join(str(x) for x in lots)
+    runs: list[list] = []
+    for lot in lots:
+        if runs and runs[-1][0] == lot:
+            runs[-1][1] += 1
+        else:
+            runs.append([lot, 1])
+    return ", ".join(f"{n} x {lot}" for lot, n in runs)
 
 
 def lots_by_layer(details: dict[str, Any], base_lot: Decimal) -> list[Decimal]:

@@ -11,6 +11,10 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from actp.confirm import defaults as _confirm_defaults
+from actp.confirm import validate as _confirm_validate
+from actp.timeframes import DEFAULT_TIMEFRAME, TIMEFRAMES
+
 DEFAULTS: dict[str, Any] = {
     "symbol": "XAUUSDc",
     "lot_per_order": "0.01",
@@ -19,6 +23,22 @@ DEFAULTS: dict[str, Any] = {
     "scl_enabled": True,
     "scl_fraction": "0.15",
     "max_market_layers": 3,
+    # "candle": cut when a completed candle of the chosen timeframe closes
+    # beyond the Cut Loss. "legacy": the hold-timer rule (hold + SCL).
+    "cut_loss_mode": "candle",
+    "cut_loss_timeframe": DEFAULT_TIMEFRAME,
+    "layer_amount": 6,
+    # Manual Input: an empty Stop Loss box = this many times the range.
+    "stop_loss_multiple": "3",
+    # Saved MultiLayer: {"4": "1,1,1,2"}. Used when the MultiLayer box is
+    # empty and the Layer amount is that number.
+    "saved_multilayers": {},
+    # Per action: True = normal OK / Cancel popup, False = type a 5-digit code.
+    "confirm": _confirm_defaults(),
+    # Window language: "en" (English) or "id" (Bahasa Indonesia).
+    "language": "en",
+    # "light" or "dark" (the sun / moon button on the main window).
+    "theme": "light",
 }
 
 _SYMBOL = re.compile(r"[A-Za-z0-9._#+\-]{3,24}")
@@ -81,9 +101,56 @@ def validate(raw: Any) -> dict[str, Any]:
         raise ValueError("SCL distance must be between 5% and 95%.")
     out["scl_fraction"] = str(fraction)
     out["max_market_layers"] = _int(
-        out["max_market_layers"], "Max layers at market", 0, 12
+        out["max_market_layers"], "Max layers at market", 0, 200
     )
+    if out["cut_loss_mode"] not in ("candle", "legacy"):
+        raise ValueError("Cut loss mode must be 'candle' or 'legacy'.")
+    if out["cut_loss_timeframe"] not in TIMEFRAMES:
+        raise ValueError(
+            "Cut loss timeframe must be one of: " + ", ".join(TIMEFRAMES) + "."
+        )
+    multiple = _dec(out["stop_loss_multiple"], "Stop loss multiple")
+    if not Decimal("0.1") <= multiple <= Decimal("100"):
+        raise ValueError("Stop loss multiple must be between 0.1 and 100.")
+    out["stop_loss_multiple"] = format(multiple.normalize(), "f")
+    out["layer_amount"] = _int(out["layer_amount"], "Layer amount", 2, 200)
+    out["saved_multilayers"] = _presets(out["saved_multilayers"])
+    out["confirm"] = _confirm_validate(out["confirm"])
+    if out["theme"] not in ("light", "dark"):
+        raise ValueError("Theme must be light or dark.")
+    if out["language"] not in ("en", "id"):
+        raise ValueError("Language must be English (en) or Bahasa Indonesia (id).")
     return out
+
+
+def _presets(raw: Any) -> dict[str, str]:
+    """{"layers": "w1,w2,..."} with one weight per layer."""
+    from actp.layers import parse_weights  # local: layers has no settings import
+    if not isinstance(raw, dict):
+        raise ValueError("Saved MultiLayer must be a list of entries.")
+    clean: dict[str, str] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not key.isdigit() or not 2 <= int(key) <= 200:
+            raise ValueError(f"Saved MultiLayer: '{key}' is not a layer amount (2-200).")
+        if not isinstance(value, str):
+            raise ValueError(f"Saved MultiLayer for {key} layers must be text.")
+        if not value.strip():
+            continue  # empty = default 1x for every layer, nothing to store
+        weights = parse_weights(value)
+        if weights is None or len(weights) != int(key):
+            raise ValueError(
+                f"Saved MultiLayer for {key} layers needs exactly {key} numbers."
+            )
+        clean[str(int(key))] = ", ".join(format(w.normalize(), "f") for w in weights)
+    return dict(sorted(clean.items(), key=lambda kv: int(kv[0])))
+
+
+def update(path: str | Path, **changes: Any) -> dict[str, Any]:
+    """Change some settings and save. Other values are kept."""
+    values = load(path)
+    values.update(changes)
+    save(path, values)
+    return values
 
 
 def load(path: str | Path) -> dict[str, Any]:

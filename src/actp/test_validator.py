@@ -43,7 +43,7 @@ def test_reject_unauthorized_symbol():
 
 def test_reject_excessive_layers():
     plan = parse_plan(BUY_ONLY_PLAN)
-    plan["buy"]["layers"] = 21
+    plan["buy"]["layers"] = 201
 
     with pytest.raises(ValueError, match="layers must be between"):
         validate_plan(plan)

@@ -75,7 +75,7 @@ def test_same_text_after_the_window_is_a_new_message():
     active = [
         o for o in broker.list_orders() if o.status == OrderStatus.PENDING
     ]
-    assert len(active) == 12
+    assert len(active) == 24  # plans are independent: both stay live
 
 
 def test_update_message_changes_buy_orders():
@@ -139,3 +139,32 @@ def test_resending_after_a_halt_resumes_instead_of_duplicating():
         result.message_id
     }
     assert all(o.status == OrderStatus.PENDING for o in orders)
+
+
+def test_mt5_comment_is_time_greek_name_and_layer():
+    dispatcher, broker, clock = make()
+    clock.now = 1_763_440_000.0
+    result = dispatcher.dispatch(PLAN_TEXT)
+    assert result.message_id == "1763440000-Alpha"
+    ids = {o.client_id for o in broker.list_orders()}
+    assert "1763440000-Alpha:0" in ids
+    assert all(i.startswith("1763440000-Alpha:") for i in ids)
+    assert all(len(i) <= 31 for i in ids)
+
+
+def test_second_plan_gets_the_next_greek_name_in_its_comment():
+    dispatcher, broker, clock = make()
+    dispatcher.dispatch(PLAN_TEXT)
+    clock.now += 100
+    second = dispatcher.dispatch(PLAN_TEXT.replace("4600", "4601"))
+    assert second.message_id.endswith("-Beta")
+    assert dispatcher._manager.plan_name(second.message_id) == "Beta"
+
+
+def test_lot_change_while_running_is_used_by_the_next_plan(monkeypatch):
+    from decimal import Decimal
+    from actp import config
+    monkeypatch.setattr(config, "LOT_PER_ORDER", Decimal("0.05"))
+    dispatcher, broker, _ = make()
+    dispatcher.dispatch(PLAN_TEXT)
+    assert {o.volume for o in broker.list_orders()} == {Decimal("0.05")}

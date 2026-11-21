@@ -35,6 +35,14 @@ CUT_LOSS_HOLD_SECONDS = _v["cut_loss_hold_seconds"]
 SCL_ENABLED = _v["scl_enabled"]
 SCL_FRACTION = Decimal(_v["scl_fraction"])  # how far from Cut Loss to SL
 MAX_MARKET_LAYERS_PER_SIDE = _v["max_market_layers"]
+CUT_LOSS_MODE = _v["cut_loss_mode"]
+CUT_LOSS_TIMEFRAME = _v["cut_loss_timeframe"]
+STOP_LOSS_MULTIPLE = Decimal(_v["stop_loss_multiple"])
+LAYER_AMOUNT = _v["layer_amount"]
+SAVED_MULTILAYERS: dict[str, str] = dict(_v["saved_multilayers"])
+CONFIRM: dict[str, bool] = dict(_v["confirm"])
+LANGUAGE = _v["language"]
+THEME = _v["theme"]
 
 # ---- Fixed ---------------------------------------------------------------
 # The symbol the signal provider writes in its messages.

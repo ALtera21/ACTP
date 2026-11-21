@@ -21,6 +21,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Protocol
 
+from actp.timeframes import TIMEFRAMES
 from actp.validator import validate_plan
 
 STATE_VERSION = 1
@@ -37,6 +38,12 @@ class StoredState:
     # Insertion order is the order messages were first seen (oldest first).
     plans: dict[str, dict[str, Any]] = field(default_factory=dict)
     completed: set[str] = field(default_factory=set)
+    # Display names (Alpha, Beta, ...) by message id. Old files have none.
+    names: dict[str, str] = field(default_factory=dict)
+    # Candle cut-loss rule by message id: {"tf": "M5", "first": <open time of
+    # the first candle that counts>}. A plan without an entry uses the legacy
+    # hold-timer rule.
+    cut_rules: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class PlanStore(Protocol):
@@ -90,6 +97,10 @@ def _encode_state(state: StoredState) -> dict[str, Any]:
             }
             for message_id, plan in state.plans.items()
         ],
+        "names": {m: n for m, n in state.names.items() if m in state.plans},
+        "cut_rules": {
+            m: r for m, r in state.cut_rules.items() if m in state.plans
+        },
     }
 
 
@@ -104,16 +115,37 @@ def _decode_state(raw: Any) -> StoredState:
         if not isinstance(message_id, str) or message_id in plans:
             raise ValueError("Invalid or duplicate message_id.")
         plan = _decode_plan(item["plan"])
-        validate_plan(plan)
+        validate_plan(plan, stored=True)
         plans[message_id] = plan
         if item["completed"] is True:
             completed.add(message_id)
     if current is not None and current not in plans:
         raise ValueError("current_message_id has no stored plan.")
+    names = raw.get("names", {})
+    if not isinstance(names, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in names.items()
+    ):
+        raise ValueError("Invalid plan names.")
+    rules = raw.get("cut_rules", {})
+    if not isinstance(rules, dict):
+        raise ValueError("Invalid cut loss rules.")
+    for rule in rules.values():
+        if (
+            not isinstance(rule, dict)
+            or rule.get("tf") not in TIMEFRAMES
+            or isinstance(rule.get("first"), bool)
+            or not isinstance(rule.get("first"), int)
+        ):
+            raise ValueError("Invalid cut loss rule.")
     return StoredState(
         current_message_id=current,
         plans=plans,
         completed=completed,
+        names={m: n for m, n in names.items() if m in plans},
+        cut_rules={
+            m: {"tf": r["tf"], "first": r["first"]}
+            for m, r in rules.items() if m in plans
+        },
     )
 
 

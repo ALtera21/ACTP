@@ -84,3 +84,10 @@ def test_holding_is_reported_once_and_closed_follows():
     assert levels(holding) == ["warn"] and "STOP CUT LOSS" in holding[0].message
     assert m.poll() == []
     assert levels(m.poll()) == ["alert"]
+
+
+def test_candle_close_cut_is_an_alert_naming_the_plan():
+    m = CutLossMonitor(ScriptedManager({"BUY #Beta": "CLOSED_CANDLE"}, {}))
+    events = m.poll()
+    assert levels(events) == ["alert"]
+    assert "BUY #Beta" in events[0].message and "candle" in events[0].message

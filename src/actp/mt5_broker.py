@@ -34,7 +34,9 @@ from actp.broker import (
     OrderRequest,
     OrderStatus,
     Tick,
+    Candle,
 )
+from actp.timeframes import TIMEFRAME_SECONDS
 
 # Every ACTP order carries this number. Pick any int; never reuse it for
 # manual trades, because list_orders treats everything with it as ACTP's.
@@ -147,7 +149,29 @@ class Mt5Broker:
             raise BrokerUnavailable(f"get_tick failed: {exc}") from exc
         if bid <= 0 or ask <= 0:
             raise BrokerUnavailable(f"Invalid tick for {symbol}: {bid}/{ask}")
-        return Tick(bid=bid, ask=ask)
+        return Tick(bid=bid, ask=ask, time=int(getattr(raw, "time", 0)) or None)
+
+    def get_candles(self, symbol: str, timeframe: str, count: int) -> list[Candle]:
+        try:
+            if timeframe not in TIMEFRAME_SECONDS:
+                raise BrokerRejected(f"Unsupported timeframe {timeframe!r}.")
+            tf = getattr(self._mt5, f"TIMEFRAME_{timeframe}", None)
+            if tf is None:
+                raise BrokerRejected(f"MT5 has no timeframe {timeframe}.")
+            self._mt5.symbol_select(symbol, True)
+            # Position 0 is the candle still forming, 1 is the last completed.
+            rates = self._mt5.copy_rates_from_pos(symbol, tf, 0, count)
+            if rates is None or len(rates) == 0:
+                raise self._fail(f"candles for {symbol} {timeframe}")
+            digits = self._digits_for(symbol)
+            return [
+                Candle(open_time=int(r["time"]), close=_dec(r["close"], digits))
+                for r in rates
+            ]
+        except (BrokerRejected, BrokerUnavailable):
+            raise
+        except Exception as exc:
+            raise BrokerUnavailable(f"get_candles failed: {exc}") from exc
 
     # ---- Broker protocol: write side (stage 2) -------------------------
 

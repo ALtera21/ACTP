@@ -82,6 +82,12 @@ class CutLossMonitor:
                     + (" and STOP CUT LOSS was reached" if SCL_ENABLED else "")
                     + f": all {side} orders were cancelled/closed."
                 ))
+            elif state == "CLOSED_CANDLE":
+                events.append(Event(
+                    "alert",
+                    f"{side} candle closed beyond the Cut Loss: all "
+                    f"{side} orders were cancelled/closed."
+                ))
             elif state == "RECOVERED":
                 events.append(Event(
                     "info", f"{side} price recovered; Cut Loss timer reset."

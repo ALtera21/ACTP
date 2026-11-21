@@ -72,6 +72,16 @@ class BrokerOrder:
 class Tick:
     bid: Decimal
     ask: Decimal
+    # Broker server time of the tick, in the same unit as Candle.open_time.
+    time: int | None = None
+
+
+@dataclass(frozen=True)
+class Candle:
+    # Open time as MT5 reports it (broker server time, as epoch seconds).
+    # Only compared with other candle/tick times, never with the PC clock.
+    open_time: int
+    close: Decimal  # bid-based, like the chart
 
 
 class Broker(Protocol):
@@ -101,6 +111,14 @@ class Broker(Protocol):
 
     def get_tick(self, symbol: str) -> Tick:
         """Return the current bid/ask for a symbol."""
+        ...
+
+    def get_candles(self, symbol: str, timeframe: str, count: int) -> list[Candle]:
+        """
+        The `count` most recent candles of a timeframe ("M1", "M5", "H1"),
+        oldest first. The LAST one is the candle still forming; the ones
+        before it are completed.
+        """
         ...
 
     def place_market(self, request: OrderRequest) -> BrokerOrder:

@@ -28,12 +28,12 @@ from actp.execution import ExecutionManager
 from actp.parser import parse_message
 from actp.broker import OrderStatus
 from decimal import Decimal
-from actp.config import LOT_PER_ORDER
-from actp.layers import apply_weights, fmt_weight, lots_by_layer
+from actp import config  # config.LOT_PER_ORDER can change while running
+from actp.layers import apply_weights, fmt_weight, lots_by_layer, summarize_lots
 
 DUPLICATE_WINDOW_SECONDS = 30
 
-MAX_PLAN_ORDERS = 12  # the provider's 6 + 6; raise it on purpose if that changes
+MAX_PLAN_ORDERS = 400  # 200 layers per side, both sides: a sanity guard only
 
 def _check_size(parsed: dict[str, Any]) -> None:
     if parsed["type"] != "PLAN":
@@ -64,12 +64,12 @@ def describe(parsed: dict[str, Any]) -> str:
             if d is None:
                 continue
             total += d["layers"]
-            lots = lots_by_layer(d, LOT_PER_ORDER)
+            lots = lots_by_layer(d, config.LOT_PER_ORDER)
             lines.append(
                 f"{side.upper()}: {d['layers']} layers, "
                 f"area {d['area_start']} - {d['area_end']}, "
                 f"cut loss {d['cut_loss']}, SL {d['sl']}, TP {d['tp']}\n"
-                f"   lots (layer 1 first): {', '.join(str(x) for x in lots)}"
+                f"   lots (layer 1 first): {summarize_lots(lots)}"
                 f"  = {sum(lots)} total"
             )
         header = f"PLAN {parsed['symbol']} - {total} pending orders"
@@ -144,7 +144,7 @@ class Dispatcher:
         if kind == "PLAN":
             message_id = self._pending_ids.get(digest)
             if message_id is None:
-                message_id = f"{int(now)}-{digest[:8]}"
+                message_id = self._manager.new_message_id(int(now), digest[:8])
                 self._pending_ids[digest] = message_id
             orders = self._manager.apply_plan(message_id, parsed)
             self._pending_ids.pop(digest, None)
@@ -193,5 +193,5 @@ class Dispatcher:
         out: list[Decimal] = []
         for side in ("buy", "sell"):
             if parsed[side] is not None:
-                out += lots_by_layer(parsed[side], LOT_PER_ORDER)
+                out += lots_by_layer(parsed[side], config.LOT_PER_ORDER)
         return out

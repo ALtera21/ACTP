@@ -471,3 +471,33 @@ def test_market_opened_layer_closed_by_sl_is_reported_closed():
     (order,) = broker.list_orders()
     assert order.client_id == "m:0"
     assert order.status == OrderStatus.CLOSED
+
+# ---- get_candles / tick time ------------------------------------------------
+
+def test_get_candles_maps_rates_oldest_first():
+    broker, fake = make()
+    fake.TIMEFRAME_M5 = 5
+    fake.copy_rates_from_pos = lambda sym, tf, pos, n: (
+        [{"time": 1000, "close": 4084.5}, {"time": 1300, "close": 4085.25}]
+        if (sym, tf, pos, n) == (SYMBOL, 5, 0, 2) else None
+    )
+    got = broker.get_candles(SYMBOL, "M5", 2)
+    assert [(c.open_time, c.close) for c in got] == [
+        (1000, Decimal("4084.50")), (1300, Decimal("4085.25"))]
+
+
+def test_get_candles_failures_are_unavailable_or_rejected():
+    broker, fake = make()
+    fake.TIMEFRAME_M1 = 1
+    fake.copy_rates_from_pos = lambda *a: None
+    with pytest.raises(BrokerUnavailable):
+        broker.get_candles(SYMBOL, "M1", 2)
+    with pytest.raises(BrokerRejected):
+        broker.get_candles(SYMBOL, "M7", 2)
+
+
+def test_tick_carries_the_server_time_when_mt5_gives_one():
+    broker, fake = make()
+    assert broker.get_tick(SYMBOL).time is None
+    fake.tick = NS(bid=4084.5, ask=4084.9, time=1763400000)
+    assert broker.get_tick(SYMBOL).time == 1763400000

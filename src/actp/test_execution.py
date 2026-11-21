@@ -112,7 +112,7 @@ def test_invalid_message_id_is_rejected():
         manager.apply_plan("a:b", plan)
 
 
-def test_new_plan_replaces_previous_active_plan():
+def test_new_plan_leaves_the_previous_plan_live():
     manager, broker = make_manager()
     plan = parse_plan(SAMPLE_PLAN)
     old = manager.apply_plan("message-001", plan)
@@ -126,9 +126,9 @@ def test_new_plan_replaces_previous_active_plan():
     assert len(broker.list_orders()) == 24
     for order in orders_of(broker, "message-001"):
         expected = (
-            OrderStatus.CLOSED
+            OrderStatus.FILLED
             if order.ticket == filled.ticket
-            else OrderStatus.CANCELLED
+            else OrderStatus.PENDING
         )
         assert order.status == expected
 
@@ -149,7 +149,7 @@ def test_invalid_plan_does_not_touch_the_broker():
     assert not manager.halted
 
 
-def test_late_retry_of_old_message_does_not_replace_new_plan():
+def test_late_retry_of_old_message_changes_nothing():
     manager, broker = make_manager()
     plan = parse_plan(SAMPLE_PLAN)
     manager.apply_plan("message-001", plan)
@@ -157,31 +157,27 @@ def test_late_retry_of_old_message_does_not_replace_new_plan():
 
     returned = manager.apply_plan("message-001", plan)
 
-    assert all(o.status == OrderStatus.CANCELLED for o in returned)
-    assert len(orders_of(broker, "message-002")) == 12
-    assert all(
-        o.status == OrderStatus.PENDING
-        for o in orders_of(broker, "message-002")
-    )
+    assert len(returned) == 12
+    assert len(broker.list_orders()) == 24
+    assert all(o.status == OrderStatus.PENDING for o in broker.list_orders())
 
 
 # ---- Fail-safe halting -----------------------------------------------
 
 
-def test_cancel_failure_halts_and_places_no_new_orders():
+def test_place_failure_halts_and_nothing_else_runs():
     manager, broker = make_manager()
     plan = parse_plan(SAMPLE_PLAN)
     manager.apply_plan("message-001", plan)
-    broker.inject_fault("cancel_pending", on_call=4)
+    broker.inject_fault("place_pending", on_call=14)  # 2nd order of plan 2
 
     with pytest.raises(ExecutionHalted):
         manager.apply_plan("message-002", plan)
 
     assert manager.halted
-    assert orders_of(broker, "message-002") == []
-    old = orders_of(broker, "message-001")
-    assert sum(o.status == OrderStatus.CANCELLED for o in old) == 3
-    assert sum(o.status == OrderStatus.PENDING for o in old) == 9
+    assert len(orders_of(broker, "message-002")) == 1
+    assert all(o.status == OrderStatus.PENDING
+               for o in orders_of(broker, "message-001"))
 
     # While halted, nothing else may run.
     before = broker.list_orders()
@@ -194,28 +190,25 @@ def test_cancel_failure_halts_and_places_no_new_orders():
     assert broker.list_orders() == before
 
 
-def test_reconcile_then_retry_completes_the_replacement():
+def test_reconcile_then_retry_completes_the_plan():
     manager, broker = make_manager()
     plan = parse_plan(SAMPLE_PLAN)
     manager.apply_plan("message-001", plan)
-    broker.inject_fault("cancel_pending", on_call=4)
+    broker.inject_fault("place_pending", on_call=14)
     with pytest.raises(ExecutionHalted):
         manager.apply_plan("message-002", plan)
 
     result = manager.reconcile()
 
     assert not manager.halted
-    assert len(result.active_orders) == 9
-    assert result.mixed_plans is False
+    assert len(result.active_orders) == 13
 
     new = manager.apply_plan("message-002", plan)
 
     assert len(new) == 12
     assert all(o.status == OrderStatus.PENDING for o in new)
-    assert all(
-        o.status == OrderStatus.CANCELLED
-        for o in orders_of(broker, "message-001")
-    )
+    assert all(o.status == OrderStatus.PENDING
+               for o in orders_of(broker, "message-001"))
 
 
 def test_lost_reply_on_place_does_not_create_duplicates_on_resume():
@@ -255,7 +248,7 @@ def test_reconcile_stays_halted_if_broker_cannot_be_read():
     assert not manager.halted
 
 
-def test_reconcile_reports_mixed_plans():
+def test_reconcile_lists_active_orders_of_every_plan():
     manager, broker = make_manager()
     for client_id in ("a:0", "b:0"):
         broker.place_pending(
@@ -270,7 +263,7 @@ def test_reconcile_reports_mixed_plans():
             )
         )
 
-    assert manager.reconcile().mixed_plans is True
+    assert len(manager.reconcile().active_orders) == 2
 
 
 def test_unavailable_error_type_is_what_halts_the_manager():
@@ -550,19 +543,20 @@ def test_manual_close_and_new_plan_do_not_inherit_the_old_timer():
     )
 
 
-def test_cut_loss_uses_the_plan_behind_the_active_orders():
+def test_each_plan_uses_its_own_cut_loss():
     manager, broker = make_manager()
     manager.apply_plan("message-001", parse_plan(SAMPLE_PLAN))
     second = parse_plan(SAMPLE_PLAN)
     second["buy"]["cut_loss"] = Decimal("4116.50")
     manager.apply_plan("message-002", second)
 
-    # Below the old level (4116.98) but above the new one (4116.50).
+    # Below plan 1's level (4116.98) but above plan 2's (4116.50).
     set_tick(broker, "4116.70", "4120.00")
-    assert manager.check_cut_loss(1000) == {}
+    assert manager.check_cut_loss(1000) == {"BUY #Alpha": "WAITING"}
 
     set_tick(broker, "4116.40", "4120.00")
-    assert manager.check_cut_loss(1010) == {"BUY": "WAITING"}
+    assert manager.check_cut_loss(1010) == {
+        "BUY #Alpha": "WAITING", "BUY #Beta": "WAITING"}
 
 
 def test_cut_loss_still_runs_while_halted():
@@ -712,26 +706,27 @@ def test_snapshot_failure_does_not_halt():
     assert "error" in manager.snapshot()
     assert not manager.halted
 
-def test_buy_only_plan_keeps_the_old_sell_orders():
+def test_buy_only_plan_keeps_all_old_orders():
     manager, broker = make_manager()
     manager.apply_plan("message-001", parse_plan(SAMPLE_PLAN))
     manager.apply_plan("message-002", parse_plan(BUY_ONLY))
 
     old = orders_of(broker, "message-001")
-    assert all(o.status == OrderStatus.CANCELLED for o in old if o.side == "BUY")
-    assert all(o.status == OrderStatus.PENDING for o in old if o.side == "SELL")
+    assert all(o.status == OrderStatus.PENDING for o in old)
     new = orders_of(broker, "message-002")
     assert len(new) == 6 and all(o.status == OrderStatus.PENDING for o in new)
 
 
-def test_cut_loss_uses_each_sides_own_plan_after_a_one_sided_plan():
+def test_cut_loss_is_per_plan_with_a_one_sided_plan():
     manager, broker = make_manager()
     manager.apply_plan("message-001", parse_plan(SAMPLE_PLAN))
     manager.apply_plan("message-002", parse_plan(BUY_ONLY))
 
-    # BUY now uses 4116.50 (plan 2); SELL still uses 4127.05 (plan 1).
+    # Plan 1 BUY (4116.98) and plan 1 SELL (4127.05) are breached.
+    # Plan 2 BUY (4116.50) is not.
     set_tick(broker, "4116.70", "4127.10")
-    assert manager.check_cut_loss(1000) == {"SELL": "WAITING"}
+    assert manager.check_cut_loss(1000) == {
+        "BUY #Alpha": "WAITING", "SELL": "WAITING"}
 
 
 def test_one_sided_plan_does_not_restart_the_other_sides_timer():
@@ -746,12 +741,6 @@ def test_one_sided_plan_does_not_restart_the_other_sides_timer():
     assert manager.check_cut_loss(1060) == {"SELL": "CLOSED"}
 
 
-def test_mixed_plans_only_reported_within_one_side():
-    manager, _ = make_manager()
-    manager.apply_plan("message-001", parse_plan(SAMPLE_PLAN))
-    manager.apply_plan("message-002", parse_plan(BUY_ONLY))
-    assert manager.reconcile().mixed_plans is False
-
 def test_close_side_without_pending_leaves_pending_orders():
     manager, broker = make_manager()
     orders = manager.apply_plan("message-001", parse_plan(SAMPLE_PLAN))
@@ -765,7 +754,7 @@ def test_close_side_without_pending_leaves_pending_orders():
     assert sum(o.status == OrderStatus.PENDING for o in buys) == 5
 
 
-def test_leftover_pending_orders_are_replaced_by_the_next_plan_for_that_side():
+def test_leftover_pending_orders_stay_when_a_new_plan_arrives():
     manager, broker = make_manager()
     orders = manager.apply_plan("message-001", parse_plan(SAMPLE_PLAN))
     broker.fill(next(o for o in orders if o.side == "BUY").ticket)
@@ -774,7 +763,7 @@ def test_leftover_pending_orders_are_replaced_by_the_next_plan_for_that_side():
     manager.apply_plan("message-002", parse_plan(BUY_ONLY))
 
     old_buys = [o for o in orders_of(broker, "message-001") if o.side == "BUY"]
-    assert not any(o.status == OrderStatus.PENDING for o in old_buys)
+    assert sum(o.status == OrderStatus.PENDING for o in old_buys) == 5
     assert len(orders_of(broker, "message-002")) == 6
 
 def test_cancel_pending_side_cancels_only_pending_of_that_side():

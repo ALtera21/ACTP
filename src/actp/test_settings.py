@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from actp.settings import DEFAULTS, load, save, validate
+from actp.settings import DEFAULTS, load, save, update, validate
 
 
 def test_defaults_are_valid():
@@ -39,7 +39,7 @@ def test_hold_fraction_and_cap_ranges():
                 {"cut_loss_hold_seconds": True},
                 {"cut_loss_hold_seconds": "60"},
                 {"scl_fraction": "0.01"}, {"scl_fraction": "1"},
-                {"max_market_layers": 13}, {"max_market_layers": -1},
+                {"max_market_layers": 201}, {"max_market_layers": -1},
                 {"auto_cut_loss": "yes"}, {"scl_enabled": 1}):
         with pytest.raises(ValueError):
             validate(bad)
@@ -65,3 +65,51 @@ def test_missing_file_gives_defaults_and_corrupt_file_raises(tmp_path):
     bad.write_text(json.dumps({"symbol": "EURUSD"}))
     with pytest.raises(ValueError):
         load(bad)
+
+def test_cut_loss_mode_and_timeframe():
+    assert DEFAULTS["cut_loss_mode"] == "candle"
+    assert DEFAULTS["cut_loss_timeframe"] == "M1"
+    ok = validate({"cut_loss_mode": "legacy", "cut_loss_timeframe": "H1"})
+    assert ok["cut_loss_mode"] == "legacy" and ok["cut_loss_timeframe"] == "H1"
+    for bad in ({"cut_loss_mode": "fast"}, {"cut_loss_timeframe": "M7"},
+                {"cut_loss_timeframe": "M45"}, {"cut_loss_timeframe": 5}):
+        with pytest.raises(ValueError):
+            validate(bad)
+
+
+def test_stop_loss_multiple():
+    assert DEFAULTS["stop_loss_multiple"] == "3"
+    assert validate({"stop_loss_multiple": "2.50"})["stop_loss_multiple"] == "2.5"
+    assert validate({"stop_loss_multiple": 4})["stop_loss_multiple"] == "4"
+    for bad in ("0", "0.05", "101", "abc", "NaN"):
+        with pytest.raises(ValueError):
+            validate({"stop_loss_multiple": bad})
+
+
+def test_confirm_settings_round_trip_and_survive_update(tmp_path):
+    path = tmp_path / "s.json"
+    values = validate({"confirm": {"kill": False}})
+    assert values["confirm"]["kill"] is False and values["confirm"]["send"] is True
+    save(path, values)
+    update(path, layer_amount=7)
+    assert load(path)["confirm"]["kill"] is False
+    with pytest.raises(ValueError):
+        validate({"confirm": {"bogus": True}})
+
+
+def test_language_setting():
+    assert validate({})["language"] == "en"
+    assert validate({"language": "id"})["language"] == "id"
+    with pytest.raises(ValueError):
+        validate({"language": "fr"})
+
+
+def test_theme_setting(tmp_path):
+    assert validate({})["theme"] == "light"
+    assert validate({"theme": "dark"})["theme"] == "dark"
+    with pytest.raises(ValueError):
+        validate({"theme": "blue"})
+    path = tmp_path / "s.json"
+    save(path, validate({}))
+    update(path, theme="dark")
+    assert load(path)["theme"] == "dark"

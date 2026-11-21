@@ -7,7 +7,7 @@ from actp.config import SOURCE_SYMBOL, SYMBOL
 from actp.price_calculator import calculate_entry_prices
 
 
-MAX_LAYERS = 20
+MAX_LAYERS = 200
 CENT = Decimal("0.01")
 
 
@@ -36,12 +36,16 @@ def _validate_price(value: Any, field_name: str, side: str) -> None:
         )
 
 
-def validate_plan(plan: dict[str, Any]) -> None:
+def validate_plan(plan: dict[str, Any], *, stored: bool = False) -> None:
     """
     Validate a parsed PLAN before generating its order preview.
 
     Raises ValueError when the plan fails a safety check.
     Does not connect to MT5 or place orders.
+
+    stored=True is for plans read back from the state file. They may have
+    been saved under another symbol (the user can change the symbol in
+    Settings), so only "some XAUUSD symbol" is required, not the current one.
     """
     if not isinstance(plan, dict):
         raise ValueError("Plan must be a dictionary.")
@@ -49,7 +53,11 @@ def validate_plan(plan: dict[str, Any]) -> None:
     if plan.get("type") != "PLAN":
         raise ValueError("Only PLAN messages can be validated for order creation.")
 
-    if plan.get("symbol") != SYMBOL:
+    symbol = plan.get("symbol")
+    if stored:
+        if not isinstance(symbol, str) or "XAUUSD" not in symbol.upper():
+            raise ValueError("Unauthorized trading symbol.")
+    elif symbol != SYMBOL:
         raise ValueError("Unauthorized trading symbol.")
 
     if plan.get("source_symbol") != SOURCE_SYMBOL:

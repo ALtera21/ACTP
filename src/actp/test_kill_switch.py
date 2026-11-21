@@ -65,7 +65,7 @@ def test_resending_after_kill_starts_a_fresh_plan():
 
 def test_oversized_plan_is_refused_in_preview_and_dispatch():
     dispatcher, _, broker, _ = make()
-    big = PLAN_TEXT.replace("6 layer", "11 layer")  # 22 orders
+    big = PLAN_TEXT.replace("6 layer", "201 layer")  # 402 orders
     with pytest.raises(ValueError, match=str(MAX_PLAN_ORDERS)):
         dispatcher.preview(big)
     with pytest.raises(ValueError, match=str(MAX_PLAN_ORDERS)):

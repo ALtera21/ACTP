@@ -113,3 +113,40 @@ def test_save_leaves_no_temp_file_and_creates_parent_directory():
 
         assert path.exists()
         assert [p.name for p in path.parent.iterdir()] == ["state.json"]
+
+
+def test_plans_saved_under_another_symbol_still_load():
+    """Changing the symbol in Settings must not stop ACTP from starting."""
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "state.json"
+        store = JsonPlanStore(path)
+        store.save(sample_state())
+
+        data = json.loads(path.read_text())
+        data["plans"][0]["plan"]["symbol"] = "XAUUSD247c"
+        path.write_text(json.dumps(data))
+
+        loaded = store.load()
+        assert loaded.plans["message-001"]["symbol"] == "XAUUSD247c"
+
+
+def test_cut_rules_round_trip_and_bad_ones_are_rejected():
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "state.json"
+        store = JsonPlanStore(path)
+        state = sample_state()
+        state.cut_rules = {"message-001": {"tf": "M5", "first": 1000300}}
+        store.save(state)
+        assert store.load().cut_rules == {
+            "message-001": {"tf": "M5", "first": 1000300}}
+
+        data = json.loads(path.read_text())
+        data["cut_rules"]["message-001"]["tf"] = "M7"
+        path.write_text(json.dumps(data))
+        with pytest.raises(PlanStoreError):
+            store.load()
+
+        data["cut_rules"]["message-001"] = {"tf": "M5", "first": "x"}
+        path.write_text(json.dumps(data))
+        with pytest.raises(PlanStoreError):
+            store.load()

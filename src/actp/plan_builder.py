@@ -1,6 +1,7 @@
 from typing import Any
 
-from actp.config import LOT_PER_ORDER, SYMBOL
+from actp import config
+from actp.config import SYMBOL
 from actp.price_calculator import calculate_entry_prices
 from actp.layers import volumes_for
 
@@ -38,7 +39,7 @@ def build_plan_preview(plan: dict[str, Any]) -> list[dict[str, Any]]:
             layers=layers,
         )
 
-        volumes = volumes_for(side, details, LOT_PER_ORDER)
+        volumes = volumes_for(side, details, config.LOT_PER_ORDER)
         for price, volume in zip(prices, volumes):
             orders.append(
                 {

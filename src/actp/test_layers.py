@@ -28,7 +28,7 @@ def test_parse_weights():
 
 @pytest.mark.parametrize("text", [
     "1", "1,0", "1,-1", "1,x", "1,11", "1,NaN", "1,Infinity",
-    ",".join(["1"] * 13),
+    ",".join(["1"] * 201),
 ])
 def test_bad_weights_are_rejected(text):
     with pytest.raises(ValueError):
@@ -92,8 +92,8 @@ def test_same_text_with_other_weights_is_not_a_duplicate():
     clock.now += 1
     dispatcher.dispatch(PLAN_TEXT, parse_weights(W6))  # must not raise
     active = [o for o in broker.list_orders() if o.status == OrderStatus.PENDING]
-    assert len(active) == 12
-    assert sum(o.volume for o in active) == 16 * L
+    assert len(active) == 24  # independent plans: both stay live
+    assert sum(o.volume for o in active) == 28 * L
 
 
 def test_resume_after_halt_keeps_the_weights():
@@ -115,3 +115,89 @@ def test_weights_survive_the_plan_store(tmp_path):
     plan = apply_weights(parse_plan(PLAN_TEXT), parse_weights("1,2,3"))
     ExecutionManager(FakeBroker(), store).apply_plan("m1", plan)
     assert store.load().plans["m1"]["buy"]["weights"] == ["1", "2", "3"]
+
+# ---- v2.0: no 12-layer cap, Layer amount box, saved MultiLayer ------------
+
+from actp.layers import (  # noqa: E402
+    parse_layer_amount, resolve_weights, summarize_lots,
+)
+from actp.settings import validate  # noqa: E402
+
+
+def test_up_to_200_layers_are_accepted():
+    assert len(parse_weights(",".join(["1"] * 200))) == 200
+
+
+def test_parse_layer_amount():
+    assert parse_layer_amount(" 6 ") == 6
+    for bad in ("", "abc", "1", "201", "-3", "2.5"):
+        with pytest.raises(ValueError):
+            parse_layer_amount(bad)
+
+
+def test_typed_multilayer_beats_layer_amount_and_presets():
+    got = resolve_weights("1,1,1,2,2", "9", {"9": "1,1,1,1,1,1,1,1,3"})
+    assert got == [D(1), D(1), D(1), D(2), D(2)]
+
+
+def test_empty_multilayer_uses_the_saved_preset_for_that_amount():
+    presets = {"4": "1, 1, 1, 2"}
+    assert resolve_weights("", "4", presets) == [D(1), D(1), D(1), D(2)]
+    assert resolve_weights("  ", 4, presets) == [D(1), D(1), D(1), D(2)]
+
+
+def test_layer_amount_without_a_preset_is_one_x_each():
+    assert resolve_weights("", "5", {"4": "1,1,1,2"}) == [D(1)] * 5
+    assert resolve_weights("", "5", {"5": " "}) == [D(1)] * 5
+
+
+def test_preset_with_wrong_count_is_refused():
+    with pytest.raises(ValueError, match="saved MultiLayer"):
+        resolve_weights("", "4", {"4": "1,2"})
+
+
+def test_summarize_lots_compresses_long_lists():
+    assert summarize_lots([D("0.01"), D("0.02")]) == "0.01, 0.02"
+    assert summarize_lots([D("0.01")] * 100 + [D("0.02")] * 50) == (
+        "100 x 0.01, 50 x 0.02")
+
+
+BIG_PLAN = """PLAN XAUUSDr
+BUY LIMIT (6 layer, 0.72 lot)
+Area: 4300.00 - 4100.00
+Cut Loss: 4090.00
+SL: 4080.00 | TP: 4310.00
+SELL LIMIT (6 layer, 0.72 lot)
+Area: 4400.00 - 4600.00
+Cut Loss: 4610.00
+SL: 4620.00 | TP: 4390.00
+"""
+
+
+def test_plan_with_200_layers_per_side_is_placed():
+    dispatcher, broker, _ = make()
+    dispatcher.dispatch(BIG_PLAN, resolve_weights("", "200", {}))
+    orders = broker.list_orders()
+    assert len(orders) == 400
+    assert len({o.client_id for o in orders}) == 400
+
+
+def test_layer_amount_overrides_the_plans_own_layer_count():
+    dispatcher, broker, _ = make()
+    dispatcher.dispatch(PLAN_TEXT, resolve_weights("", "4", {"4": "1,1,1,2"}))
+    assert len(broker.list_orders()) == 8
+    assert sorted(o.volume for o in broker.list_orders()) == sorted(
+        [L] * 6 + [2 * L] * 2)
+
+
+def test_settings_keep_and_check_saved_multilayers():
+    out = validate({"saved_multilayers": {"4": "1,1,1,2", "3": " ", "10": "1,1,1,1,1,1,1,1,1,2"},
+                    "layer_amount": 10})
+    assert out["saved_multilayers"] == {
+        "4": "1, 1, 1, 2", "10": "1, 1, 1, 1, 1, 1, 1, 1, 1, 2"}
+    assert out["layer_amount"] == 10
+    for bad in ({"4": "1,2"}, {"x": "1,2"}, {"201": "1"}, {"4": 5}):
+        with pytest.raises(ValueError):
+            validate({"saved_multilayers": bad})
+    with pytest.raises(ValueError):
+        validate({"layer_amount": 1})

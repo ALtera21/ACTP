@@ -19,6 +19,7 @@ from actp.broker import (
     OrderRequest,
     OrderStatus,
     Tick,
+    Candle,
 )
 
 T = TypeVar("T")
@@ -31,6 +32,7 @@ BROKER_METHODS = frozenset(
         "modify_sltp",
         "list_orders",
         "get_tick",
+        "get_candles",
         "place_market"
     }
 )
@@ -48,6 +50,7 @@ class FakeBroker:
         self._orders: dict[str, BrokerOrder] = {}
         self._ticket_by_client_id: dict[str, str] = {}
         self._ticks: dict[str, Tick] = {}
+        self._candles: dict[tuple[str, str], list[Candle]] = {}
         self._next_ticket = 1
         self._call_counts: dict[str, int] = defaultdict(int)
         self._faults: dict[str, list[_Fault]] = defaultdict(list)
@@ -79,8 +82,16 @@ class FakeBroker:
             raise ValueError("A rejected action cannot have been applied.")
         self._faults[method].append(_Fault(on_call, error, applied))
 
-    def set_tick(self, symbol: str, bid: Decimal, ask: Decimal) -> None:
-        self._ticks[symbol] = Tick(bid=bid, ask=ask)
+    def set_tick(
+        self, symbol: str, bid: Decimal, ask: Decimal, time: int | None = None
+    ) -> None:
+        self._ticks[symbol] = Tick(bid=bid, ask=ask, time=time)
+
+    def set_candles(
+        self, symbol: str, timeframe: str, candles: list[Candle]
+    ) -> None:
+        """Oldest first; the last one is the candle still forming."""
+        self._candles[(symbol, timeframe)] = list(candles)
 
     def fill(self, ticket: str) -> None:
         """Simulate a pending order being filled by the market."""
@@ -108,6 +119,11 @@ class FakeBroker:
 
     def get_tick(self, symbol: str) -> Tick:
         return self._run("get_tick", lambda: self._tick(symbol))
+
+    def get_candles(self, symbol: str, timeframe: str, count: int) -> list[Candle]:
+        return self._run(
+            "get_candles", lambda: self._candles_for(symbol, timeframe, count)
+        )
 
     def place_market(self, request: OrderRequest) -> BrokerOrder:
         return self._run("place_market", lambda: self._place_market(request))
@@ -177,6 +193,14 @@ class FakeBroker:
             return self._ticks[symbol]
         except KeyError as exc:
             raise BrokerUnavailable(f"No tick available for {symbol}.") from exc
+
+    def _candles_for(self, symbol: str, timeframe: str, count: int) -> list[Candle]:
+        items = self._candles.get((symbol, timeframe))
+        if not items:
+            raise BrokerUnavailable(
+                f"No candles available for {symbol} {timeframe}."
+            )
+        return list(items[-count:])
 
     def _place_market(self, request: OrderRequest) -> BrokerOrder:
         existing = self._ticket_by_client_id.get(request.client_id)
