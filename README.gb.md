@@ -3,9 +3,7 @@
 # ACTP – Auto Copy Trade Plan
 
 <p align="center">
-  <a href="https://youtu.be/d0bM5Vmml2w">
     <img src="docs\mylogo.png" width="256" alt="icon">
-  </a>
 </p>
 
 ACTP places a layered set of MT5 pending orders from a trade plan you paste in (or fill in by hand on the **Manual Input** tab), and manages every plan afterwards (Cut Loss, close buttons, Auto-TP). It never reads WhatsApp for you: you copy and paste each message.
