@@ -43,6 +43,7 @@ SAVED_MULTILAYERS: dict[str, str] = dict(_v["saved_multilayers"])
 CONFIRM: dict[str, bool] = dict(_v["confirm"])
 LANGUAGE = _v["language"]
 THEME = _v["theme"]
+AUTO_TP = _v["auto_tp"]
 
 # ---- Fixed ---------------------------------------------------------------
 # The symbol the signal provider writes in its messages.

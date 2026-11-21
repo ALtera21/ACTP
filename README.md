@@ -36,7 +36,7 @@ Sebelum memasang ACTP, pastikan Anda memiliki:
 
 Unduh rilis ACTP terbaru dari halaman GitHub Releases resmi:
 
-**[KLIK DI SINI UNTUK MENGUNDUH ACTP – RILIS TERBARU](https://github.com/ALtera21/ACTP/releases/download/v2.0.0/dist.zip)**
+**[KLIK DI SINI UNTUK MENGUNDUH ACTP – RILIS TERBARU](https://github.com/ALtera21/ACTP/releases/download/v2.0.1/dist.zip)**
 
 1. Unduh file `.zip` yang tersedia di bagian **Assets**.
 2. Ekstrak file ZIP ke folder pilihan Anda.
@@ -54,7 +54,7 @@ C:\ACTP
 ```powershell
 Get-FileHash .\dist.zip -Algorithm SHA256
 ```
-lalu bandingkan dengan: `b89dd2ade0134dd01b9cbbb18d988cd0cda687c371f3accf1f354da55c42ea8f`
+lalu bandingkan dengan: `1384356ed0aff73e6c2ab62ba8bf042caf2b6e7edfb41b4964e45bc1b79e8361`
 
 **Memperbarui dari v1.1.0:** tutup ACTP, ekstrak v2.0.0 ke folder baru lalu jalankan. Pengaturan dan state tersimpan Anda di `%APPDATA%\ACTP` tetap terbawa. Plan yang masih terbuka dari v1.1.0 tetap memakai Cut Loss hold-timer yang lama.
 

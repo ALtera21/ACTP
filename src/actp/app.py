@@ -59,7 +59,7 @@ RED_TEXT = P["red_text"]
 DANGER_BG = P["danger_bg"]
 BUY_GREEN = "#2e7d32"
 SELL_RED = "#d30404"   # a lighter orange-red, so it can't be mistaken for KILL ALL (#b00020)
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 
 RISK_TEXT = (
     "ACTP places REAL orders on whichever MetaTrader 5 account is logged in, "
@@ -743,6 +743,14 @@ class SettingsDialog:
         except ValueError:
             return config.LAYER_AMOUNT
 
+    @staticmethod
+    def current_auto_tp() -> bool:
+        """The Auto-TP tick box saves itself to the file; keep that value."""
+        try:
+            return cfg.load(config.SETTINGS_PATH)["auto_tp"]
+        except ValueError:
+            return config.AUTO_TP
+
     def save(self) -> None:
         try:
             raw = {
@@ -760,6 +768,7 @@ class SettingsDialog:
                 "saved_multilayers": self.presets,
                 "confirm": {k: v.get() for k, v in self.ask.items()},
                 "theme": self.current_theme(),
+                "auto_tp": self.current_auto_tp(),
                 "language": next(
                     (c for c, n in i18n.LANGUAGES.items()
                      if n == self.lang.get()), "en"),
@@ -848,7 +857,8 @@ class App:
         self.manager = manager
         self.broker = broker
         self.dispatcher = Dispatcher(manager)
-        self.auto_tp = tk.BooleanVar(value=False)
+        self.auto_tp = tk.BooleanVar(value=config.AUTO_TP)
+        self.auto_tp.trace_add("write", self.save_auto_tp)
         self._tp_last: dict[str, str] = {}
         self.monitor = CutLossMonitor(manager) if config.AUTO_CUT_LOSS else None
         self._last_ok: datetime | None = None
@@ -1647,6 +1657,13 @@ class App:
                 self._persisted_amount = amount
         except (ValueError, OSError) as exc:
             self.log(f"WARN: could not save the Layer amount: {exc}")
+
+    def save_auto_tp(self, *_args) -> None:
+        """Remember the Auto-TP tick box for the next start-up."""
+        try:
+            cfg.update(config.SETTINGS_PATH, auto_tp=bool(self.auto_tp.get()))
+        except (ValueError, OSError, tk.TclError) as exc:
+            self.log(f"WARN: could not save the Auto-TP choice: {exc}")
 
     # ---- auto TP ---------------------------------------------------------
     def run_auto_tp(self) -> None:

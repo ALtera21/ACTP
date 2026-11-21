@@ -113,3 +113,11 @@ def test_theme_setting(tmp_path):
     save(path, validate({}))
     update(path, theme="dark")
     assert load(path)["theme"] == "dark"
+
+
+def test_auto_tp_choice_is_saved_and_loaded(tmp_path):
+    path = tmp_path / "settings.json"
+    update(path, auto_tp=True)
+    assert load(path)["auto_tp"] is True
+    update(path, auto_tp=False)
+    assert load(path)["auto_tp"] is False

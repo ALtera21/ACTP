@@ -39,6 +39,8 @@ DEFAULTS: dict[str, Any] = {
     "language": "en",
     # "light" or "dark" (the sun / moon button on the main window).
     "theme": "light",
+    # The Auto-TP tick box on the main window (remembered between runs).
+    "auto_tp": False,
 }
 
 _SYMBOL = re.compile(r"[A-Za-z0-9._#+\-]{3,24}")
@@ -116,6 +118,8 @@ def validate(raw: Any) -> dict[str, Any]:
     out["layer_amount"] = _int(out["layer_amount"], "Layer amount", 2, 200)
     out["saved_multilayers"] = _presets(out["saved_multilayers"])
     out["confirm"] = _confirm_validate(out["confirm"])
+    if not isinstance(out["auto_tp"], bool):
+        raise ValueError("Auto-TP must be true or false.")
     if out["theme"] not in ("light", "dark"):
         raise ValueError("Theme must be light or dark.")
     if out["language"] not in ("en", "id"):

@@ -36,7 +36,7 @@ Before installing ACTP, make sure you have:
 
 Download the latest ACTP release from the official GitHub Releases page:
 
-**[CLICK HERE TO DOWNLOAD ACTP – LATEST RELEASE](https://github.com/ALtera21/ACTP/releases/download/v2.0.0/dist.zip)**
+**[CLICK HERE TO DOWNLOAD ACTP – LATEST RELEASE](https://github.com/ALtera21/ACTP/releases/download/v2.0.1/dist.zip)**
 
 1. Download the provided `.zip` file under **Assets**.
 2. Extract the ZIP file to your preferred directory.
@@ -54,7 +54,7 @@ C:\ACTP
 ```powershell
 Get-FileHash .\dist.zip -Algorithm SHA256
 ```
-and compare with: `b89dd2ade0134dd01b9cbbb18d988cd0cda687c371f3accf1f354da55c42ea8f`
+and compare with: `1384356ed0aff73e6c2ab62ba8bf042caf2b6e7edfb41b4964e45bc1b79e8361`
 
 **Updating from v1.1.0:** close ACTP, extract v2.0.0 into a new folder and run it. Your settings and saved state in `%APPDATA%\ACTP` carry over. Plans still open from v1.1.0 keep their old hold-timer Cut Loss.
 
