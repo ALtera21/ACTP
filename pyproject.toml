@@ -1,7 +1,7 @@
 [project]
 name = "actp"
-version = "0.1.0"
-description = "Add your description here"
+version = "2.0.0"
+description = "Auto Copy Trade Plan: places and manages MetaTrader 5 orders from a pasted trading plan."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-actp = "actp:main"
+actp = "actp.app:main"
 
 [build-system]
 requires = ["uv_build>=0.13.1,<0.14.0"]
