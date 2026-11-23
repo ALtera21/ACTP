@@ -565,7 +565,7 @@ class ExecutionManager:
         }
 
     def move_tp_when_full(self) -> dict[str, tuple[str, Decimal, int]]:
-        """When every layer of a plan's side is FILLED, move that plan's TP
+        """When every layer still alive of a plan's side is FILLED, move that plan's TP
         to its first entry (BUY: highest layer, SELL: lowest). Once per plan
         and side; every plan is handled on its own. Returns label ->
         (state, target, positions modified) for MOVED, PRICE_PAST (price
@@ -588,9 +588,15 @@ class ExecutionManager:
                 section = None if plan is None else plan.get(side.lower())
                 if section is None or key in self._tp_done:
                     continue
-                if len(active) != section["layers"] or any(
-                    o.status != OrderStatus.FILLED for o in active
-                ):
+                # Every order still alive must be filled. A plan that was
+                # fully placed may have fewer than its layers left (some hit
+                # TP, were closed or cancelled in MT5): those that remain
+                # still count. A plan that is still being placed must show
+                # all its layers first.
+                if any(o.status != OrderStatus.FILLED for o in active):
+                    continue
+                if (message_id not in self._completed
+                        and len(active) != section["layers"]):
                     continue
                 prices = (section["area_start"], section["area_end"])
                 target = max(prices) if side == "BUY" else min(prices)

@@ -96,3 +96,33 @@ def test_auto_tp_waits_while_price_is_past_the_new_tp():
         "BUY": ("PRICE_PAST", Decimal("4119.83"), 0)}
     set_tick(broker, "4118.00", "4118.20")
     assert manager.move_tp_when_full()["BUY"][0] == "MOVED"
+
+def test_auto_tp_still_fires_when_some_layers_already_left():
+    manager, broker = make()
+    set_tick(broker, "4121.00", "4121.20")
+    orders = manager.apply_plan("message-001", parse_plan(SAMPLE_PLAN))
+    buys = [o for o in orders if o.side == "BUY"]
+    broker.fill(buys[0].ticket)
+    broker.close_position(buys[0].ticket)  # hit TP (or closed in MT5)
+    broker.cancel_pending(buys[1].ticket)  # cancelled by hand in MT5
+    assert manager.move_tp_when_full() == {}  # the rest are still pending
+    for o in buys[2:]:
+        broker.fill(o.ticket)
+    set_tick(broker, "4117.50", "4117.70")
+    assert manager.move_tp_when_full() == {
+        "BUY": ("MOVED", Decimal("4119.83"), 4)}
+    assert manager.move_tp_when_full() == {}  # once only
+
+
+def test_auto_tp_waits_for_a_plan_that_is_still_being_placed():
+    manager, broker = make()
+    set_tick(broker, "4121.00", "4121.20")
+    plan = parse_plan(SAMPLE_PLAN)
+    broker.inject_fault("place_pending", on_call=3, applied=False)
+    with pytest.raises(ExecutionHalted):
+        manager.apply_plan("message-001", plan)
+    manager.reconcile()
+    for o in broker.list_orders():
+        broker.fill(o.ticket)  # the 2 placed layers fill before the rest
+    set_tick(broker, "4117.50", "4117.70")
+    assert manager.move_tp_when_full() == {}  # not completed: wait
