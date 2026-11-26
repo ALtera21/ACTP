@@ -38,7 +38,7 @@ Before installing ACTP, make sure you have:
 
 Download the latest ACTP release from the official GitHub Releases page:
 
-**[CLICK HERE TO DOWNLOAD ACTP – LATEST RELEASE](https://github.com/ALtera21/ACTP/releases/download/v2.1.0/dist.zip)**
+**[CLICK HERE TO DOWNLOAD ACTP – LATEST RELEASE](https://github.com/ALtera21/ACTP/releases/download/v2.1.1/dist.zip)**
 
 1. Download the provided `.zip` file under **Assets**.
 2. Extract the ZIP file to your preferred directory.
@@ -56,7 +56,7 @@ C:\ACTP
 ```powershell
 Get-FileHash .\dist.zip -Algorithm SHA256
 ```
-and compare with: `8ac67652b456764e9b5d6a5fc5634a41f1f46dc65ed34b0f7ca5b1ccd19f4495`
+and compare with: `b845b7dcb5b483abd13a72c0a14a9e976c885d8f99337f828ee497d7b18848af`
 
 **Updating from v2.0.x:** close ACTP, extract v2.1.0 into a new folder and run it. Your settings and saved state in `%APPDATA%\ACTP` carry over, and plans that are still open keep running. A choice you already saved (for example Auto-TP off) is kept; the new defaults only apply to settings that were never saved.
 

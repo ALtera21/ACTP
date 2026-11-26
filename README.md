@@ -38,7 +38,7 @@ Sebelum memasang ACTP, pastikan Anda punya:
 
 Unduh rilis ACTP terbaru dari halaman GitHub Releases resmi:
 
-**[KLIK DI SINI UNTUK MENGUNDUH ACTP – RILIS TERBARU](https://github.com/ALtera21/ACTP/releases/download/v2.1.0/dist.zip)**
+**[KLIK DI SINI UNTUK MENGUNDUH ACTP – RILIS TERBARU](https://github.com/ALtera21/ACTP/releases/download/v2.1.1/dist.zip)**
 
 1. Unduh file `.zip` yang tersedia di bagian **Assets**.
 2. Ekstrak file ZIP ke folder pilihan Anda.
@@ -56,7 +56,7 @@ C:\ACTP
 ```powershell
 Get-FileHash .\dist.zip -Algorithm SHA256
 ```
-lalu bandingkan dengan: `8ac67652b456764e9b5d6a5fc5634a41f1f46dc65ed34b0f7ca5b1ccd19f4495`
+lalu bandingkan dengan: `b845b7dcb5b483abd13a72c0a14a9e976c885d8f99337f828ee497d7b18848af`
 
 **Update dari v2.0.x:** tutup ACTP, ekstrak v2.1.0 ke folder baru dan jalankan. Pengaturan dan data tersimpan di `%APPDATA%\ACTP` ikut terbawa, dan plan yang masih terbuka tetap berjalan. Pilihan yang sudah Anda simpan (misalnya Auto-TP mati) tetap dipakai; nilai bawaan yang baru hanya berlaku untuk pengaturan yang belum pernah disimpan.
 
