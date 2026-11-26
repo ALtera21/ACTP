@@ -501,3 +501,33 @@ def test_tick_carries_the_server_time_when_mt5_gives_one():
     assert broker.get_tick(SYMBOL).time is None
     fake.tick = NS(bid=4084.5, ask=4084.9, time=1763400000)
     assert broker.get_tick(SYMBOL).time == 1763400000
+
+
+def test_an_order_that_is_filling_right_now_does_not_halt(monkeypatch):
+    # Seen live: orders_get briefly returned our order as type 0 (plain BUY)
+    # the moment it filled. That must not halt ACTP.
+    monkeypatch.setattr("actp.mt5_broker.time.sleep", lambda _s: None)
+    broker, fake = make()
+    fake.pendings = [pending(1, "m:0", type_=FakeMt5.ORDER_TYPE_BUY),
+                     pending(2, "m:1")]
+    orders = broker.list_orders()
+    assert [o.ticket for o in orders] == ["2"]
+
+
+def test_a_read_in_the_middle_of_a_fill_is_read_again(monkeypatch):
+    monkeypatch.setattr("actp.mt5_broker.time.sleep", lambda _s: None)
+    broker, fake = make()
+    fake.pendings = [pending(1, "m:0", type_=FakeMt5.ORDER_TYPE_BUY)]
+    calls = {"n": 0}
+    real = fake.orders_get
+
+    def flaky(ticket=None):
+        calls["n"] += 1
+        if calls["n"] >= 2:  # the next read is consistent: now a position
+            fake.pendings = []
+            fake.positions = [position(1, "m:0")]
+        return real(ticket)
+
+    fake.orders_get = flaky
+    orders = broker.list_orders()
+    assert [(o.ticket, o.status.name) for o in orders] == [("1", "FILLED")]

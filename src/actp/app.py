@@ -60,7 +60,7 @@ RED_TEXT = P["red_text"]
 DANGER_BG = P["danger_bg"]
 BUY_GREEN = "#2e7d32"
 SELL_RED = "#d30404"   # a lighter orange-red, so it can't be mistaken for KILL ALL (#b00020)
-VERSION = "2.1.0"
+VERSION = "2.1.1"
 
 RISK_TEXT = (
     "ACTP places REAL orders on whichever MetaTrader 5 account is logged in, "

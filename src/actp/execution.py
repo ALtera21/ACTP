@@ -715,8 +715,9 @@ class ExecutionManager:
 
         The price check runs FIRST: if the new layers would be refused (price
         through Cut Loss, too many layers at market) nothing is changed.
-        A TP set by hand on that side keeps being watched. If the broker
-        fails half way, the manager halts: reconcile, then press re-entry
+        A TP set by hand on that side is dropped: the new layers carry the
+        plan's own TP again, the TP box shows it, and Auto-TP may act on the
+        side again. If the broker fails half way, the manager halts: reconcile, then press re-entry
         again (it always clears the side first). Not allowed while halted.
 
         Returns {"cancelled", "closed", "placed", "market"}."""
@@ -752,7 +753,6 @@ class ExecutionManager:
         # New layer numbers continue after every number this plan has used
         # (the other side keeps its own), so none can clash.
         start = max(_placed_indexes(prefix, snapshot), default=-1) + 1
-        target = self._tp_targets.get(key)
 
         # Record the intent durably BEFORE touching the broker.
         self._plans[message_id][side.lower()] = deepcopy(new_section)
@@ -792,9 +792,7 @@ class ExecutionManager:
 
         self._tp_done.discard(key)
         self._depth.pop(key, None)  # the new layers start from scratch
-        if target is not None:  # the TP set by hand stays watched
-            self._tp_targets[key] = target
-            self._tp_done.add(key)
+        self._tp_targets.pop(key, None)  # back to the plan's own TP
         self._persist()
         return {"cancelled": closed["cancelled"], "closed": closed["closed"],
                 "placed": len(proposed), "market": market_count}

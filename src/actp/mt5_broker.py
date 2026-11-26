@@ -23,6 +23,7 @@ without a terminal. In real use leave it as None.
 """
 
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -133,13 +134,25 @@ class Mt5Broker:
 
     # ---- Broker protocol: read side -----------------------------------
 
+    # MT5 is read in three separate calls (orders, positions, history), so a
+    # read that lands at the moment a pending order fills or a position
+    # closes can show the same order twice or in a half-way state. Reading
+    # again a moment later gives a consistent picture.
+    _SNAPSHOT_TRIES = 3
+    _SNAPSHOT_PAUSE = 0.15
+
     def list_orders(self) -> list[BrokerOrder]:
-        try:
-            return self._list_orders()
-        except BrokerUnavailable:
-            raise
-        except Exception as exc:  # any surprise means "state unknown"
-            raise BrokerUnavailable(f"list_orders failed: {exc}") from exc
+        for attempt in range(self._SNAPSHOT_TRIES):
+            last = attempt == self._SNAPSHOT_TRIES - 1
+            try:
+                return self._list_orders(skip_in_flight=last)
+            except BrokerUnavailable as exc:
+                if last or not _TRANSIENT.search(str(exc)):
+                    raise
+            except Exception as exc:  # any surprise means "state unknown"
+                raise BrokerUnavailable(f"list_orders failed: {exc}") from exc
+            time.sleep(self._SNAPSHOT_PAUSE)
+        raise BrokerUnavailable("list_orders failed")  # not reached
 
     def get_tick(self, symbol: str) -> Tick:
         try:
@@ -551,7 +564,7 @@ class Mt5Broker:
             return "SELL"
         raise BrokerUnavailable(f"Unexpected order type {mt5_type} on ACTP order.")
 
-    def _list_orders(self) -> list[BrokerOrder]:
+    def _list_orders(self, skip_in_flight: bool = False) -> list[BrokerOrder]:
         m = self._mt5
         limit_types = (m.ORDER_TYPE_BUY_LIMIT, m.ORDER_TYPE_SELL_LIMIT)
 
@@ -585,6 +598,12 @@ class Mt5Broker:
         # 1. Active pending orders.
         for o in pendings:
             if o.magic != self._magic:
+                continue
+            if skip_in_flight and o.type in (m.ORDER_TYPE_BUY, m.ORDER_TYPE_SELL):
+                # A plain BUY/SELL "pending" order is a limit order at the
+                # very moment it fills. The position (or history) reports it
+                # on the next read; halting here would stop Cut Loss for
+                # nothing.
                 continue
             if o.type not in limit_types:
                 raise BrokerUnavailable(
@@ -682,6 +701,13 @@ class Mt5Broker:
                 f"ACTP order {ticket} has an unreadable comment {comment!r}."
             )
         return comment  # type: ignore[return-value]
+
+
+# Messages that can come from reading MT5 at the wrong instant (see
+# Mt5Broker.list_orders); they are read again before giving up.
+_TRANSIENT = re.compile(
+    r"Unexpected pending order type [01] |share client_id|Unexpected history state"
+)
 
 
 def _dec(value: float, digits: int) -> Decimal:

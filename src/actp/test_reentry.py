@@ -100,14 +100,20 @@ def test_a_refused_reentry_changes_nothing():
     assert not manager.halted
 
 
-def test_hand_set_tp_keeps_being_watched():
+def test_hand_set_tp_is_dropped_by_a_re_entry():
+    # The new layers carry the plan's own TP again, so the TP box must not
+    # keep showing the old hand-set level.
     manager, broker = make()
     for order in side(broker, "BUY")[:1]:
         broker.fill(order.ticket)
     set_tick(broker, "4117.50", "4117.70")
     manager.set_plan_tp("m-001", "BUY", "4118.50")
-    manager.reenter_side("m-001", "BUY", 6, None)
     assert manager.plans_overview()[0]["BUY"]["tp_target"] == D("4118.50")
+    manager.reenter_side("m-001", "BUY", 6, None)
+    row = manager.plans_overview()[0]["BUY"]
+    assert row["tp_target"] is None
+    assert {o.tp for o in side(broker, "BUY")
+            if o.status in (OrderStatus.PENDING, OrderStatus.FILLED)} == {row["tp"]}
 
 
 def test_bad_side_or_plan():
