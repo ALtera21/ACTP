@@ -66,15 +66,16 @@ def test_lost_reply_on_market_layer_does_not_double_buy_on_resume():
     assert len(orders) == 12
     assert len({o.client_id for o in broker.list_orders()}) == 12
     
-def test_auto_tp_moves_to_first_entry_when_all_layers_fill():
+def test_auto_tp_moves_to_first_entry_when_the_price_reaches_the_last_layer():
     manager, broker = make()
     set_tick(broker, "4121.00", "4121.20")
     orders = manager.apply_plan("message-001", parse_plan(SAMPLE_PLAN))
-    buys = [o for o in orders if o.side == "BUY"]
+    buys = sorted((o for o in orders if o.side == "BUY"),
+                  key=lambda o: o.entry_price, reverse=True)  # top layer first
     for o in buys[:5]:
         broker.fill(o.ticket)
-    assert manager.move_tp_when_full() == {}  # only 5 of 6
-    broker.fill(buys[5].ticket)
+    assert manager.move_tp_when_full() == {}  # price only 80% into the range
+    broker.fill(buys[5].ticket)  # the last layer: price at 100%
     set_tick(broker, "4117.50", "4117.70")
     assert manager.move_tp_when_full() == {
         "BUY": ("MOVED", Decimal("4119.83"), 6)}
@@ -101,28 +102,15 @@ def test_auto_tp_still_fires_when_some_layers_already_left():
     manager, broker = make()
     set_tick(broker, "4121.00", "4121.20")
     orders = manager.apply_plan("message-001", parse_plan(SAMPLE_PLAN))
-    buys = [o for o in orders if o.side == "BUY"]
+    buys = sorted((o for o in orders if o.side == "BUY"),
+                  key=lambda o: o.entry_price, reverse=True)
     broker.fill(buys[0].ticket)
     broker.close_position(buys[0].ticket)  # hit TP (or closed in MT5)
     broker.cancel_pending(buys[1].ticket)  # cancelled by hand in MT5
-    assert manager.move_tp_when_full() == {}  # the rest are still pending
+    assert manager.move_tp_when_full() == {}  # nothing is open
     for o in buys[2:]:
-        broker.fill(o.ticket)
+        broker.fill(o.ticket)  # down to the last layer
     set_tick(broker, "4117.50", "4117.70")
     assert manager.move_tp_when_full() == {
         "BUY": ("MOVED", Decimal("4119.83"), 4)}
     assert manager.move_tp_when_full() == {}  # once only
-
-
-def test_auto_tp_waits_for_a_plan_that_is_still_being_placed():
-    manager, broker = make()
-    set_tick(broker, "4121.00", "4121.20")
-    plan = parse_plan(SAMPLE_PLAN)
-    broker.inject_fault("place_pending", on_call=3, applied=False)
-    with pytest.raises(ExecutionHalted):
-        manager.apply_plan("message-001", plan)
-    manager.reconcile()
-    for o in broker.list_orders():
-        broker.fill(o.ticket)  # the 2 placed layers fill before the rest
-    set_tick(broker, "4117.50", "4117.70")
-    assert manager.move_tp_when_full() == {}  # not completed: wait

@@ -117,7 +117,8 @@ def test_plans_overview_has_one_row_per_live_plan():
     assert [r["message_id"] for r in rows] == ["m-001", "m-002"]
     assert rows[0]["BUY"] == {"filled": 1, "pending": 5,
                               "cut_loss": D("4116.98"), "sl": D("4111.30"),
-                              "tp": D("4122.02")}
+                              "tp": D("4122.02"), "tp_target": None,
+                              "tp_live": D("4122.02")}
     assert rows[1]["BUY"]["cut_loss"] == D("4116.50")
     assert rows[1]["SELL"]["pending"] == 6
     manager.close_all()

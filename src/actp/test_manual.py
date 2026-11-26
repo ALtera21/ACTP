@@ -130,3 +130,70 @@ def test_notes_show_what_empty_boxes_will_use():
     assert typed["cl"] == ""
     bare = default_notes("sell", fields(), D(3))
     assert "above" in bare["cl"] and ":" not in bare["cl"]
+
+
+# ---- one price per side: the two distals of the plan ------------------------
+
+def distal_fields(**more):
+    return fields(sell_a="3876.45", buy_b="3766.45", **more)
+
+
+def test_one_price_on_each_side_makes_the_whole_plan():
+    buy, sell = collect("both", distal_fields(), D(3))
+    # span 110: floor 0, BUY proximal 0.25, TP 0.5, SELL proximal 0.75, ceiling 1
+    assert (buy.low, buy.high) == (D("3766.45"), D("3793.95"))
+    assert (sell.low, sell.high) == (D("3848.95"), D("3876.45"))
+    assert buy.tp == sell.tp == D("3821.45")  # exactly in the middle
+    # the usual defaults give the fibonacci levels -0.075 / -0.75 / 1.075 / 1.75
+    assert buy.cut_loss == D("3758.20") and buy.sl == D("3683.95")
+    assert sell.cut_loss == D("3884.70") and sell.sl == D("3958.95")
+
+
+def test_either_box_of_a_range_can_hold_the_price():
+    one = collect("both", distal_fields(), D(3))
+    other = collect("both", fields(sell_b="3876.45", buy_a="3766.45"), D(3))
+    assert one == other
+
+
+def test_typed_cut_loss_sl_tp_still_win_in_the_distal_layout():
+    buy, sell = collect(
+        "both", distal_fields(buy_cl="3760", sell_tp="3820", buy_sl="3700"),
+        D(3))
+    assert buy.cut_loss == D("3760") and buy.sl == D("3700")
+    assert sell.tp == D("3820") and buy.tp == D("3821.45")
+
+
+def test_the_distal_layout_is_a_valid_plan_for_the_normal_pipeline():
+    sides = collect("both", distal_fields(), D(3))
+    plan = parse_message(build_plan_text(sides, 6))
+    validate_plan(plan)  # raises if the plan is not acceptable
+    assert plan["buy"]["tp"] == plan["sell"]["tp"] == D("3821.45")
+
+
+def test_distal_prices_the_wrong_way_round_are_refused():
+    with pytest.raises(ValueError, match="above the BUY"):
+        collect("both", fields(sell_a="3700", buy_b="3766.45"), D(3))
+    with pytest.raises(ValueError, match="too close"):
+        collect("both", fields(sell_a="3766.46", buy_b="3766.45"), D(3))
+
+
+def test_one_price_on_one_side_only_is_still_an_error():
+    with pytest.raises(ValueError, match="needs both prices"):
+        collect("both", fields(sell_a="3876.45"), D(3))
+    with pytest.raises(ValueError, match="needs both prices"):
+        collect("both", fields(sell_a="3876.45", buy_a="3766.45",
+                               buy_b="3770"), D(3))
+
+
+def test_the_single_buttons_still_need_both_prices():
+    with pytest.raises(ValueError, match="needs both prices"):
+        collect("buy", distal_fields(), D(3))
+
+
+def test_notes_show_the_worked_out_range_and_tp():
+    notes = default_notes("buy", distal_fields(), D(3))
+    assert "3766.45 - 3793.95" in notes["range"]
+    assert "3821.45" in notes["tp"] and "3758.20" in notes["cl"]
+    assert "3848.95 - 3876.45" in default_notes(
+        "sell", distal_fields(), D(3))["range"]
+    assert default_notes("buy", fields(), D(3))["range"] == ""

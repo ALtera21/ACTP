@@ -150,3 +150,28 @@ def test_cut_rules_round_trip_and_bad_ones_are_rejected():
         path.write_text(json.dumps(data))
         with pytest.raises(PlanStoreError):
             store.load()
+
+
+def test_tp_targets_round_trip_and_old_files_have_none(tmp_path):
+    from decimal import Decimal as _D
+    from actp.plan_store import JsonPlanStore as _Store, StoredState as _State
+    import json as _json
+    path = tmp_path / "state.json"
+    store = _Store(path)
+    # build a state with one valid plan taken from the sample plan
+    from actp.parser import parse_plan
+    from actp.test_execution import SAMPLE_PLAN
+    state = _State(current_message_id="m-1",
+                   plans={"m-1": parse_plan(SAMPLE_PLAN)})
+    store.save(state)
+    assert store.load().tp_targets == {}  # a file without targets
+    state.tp_targets = {"m-1": {"BUY": _D("4118.50")}}
+    store.save(state)
+    assert store.load().tp_targets == {"m-1": {"BUY": _D("4118.50")}}
+    raw = _json.loads(path.read_text(encoding="utf-8"))
+    raw["tp_targets"] = {"m-1": {"BUY": "-1"}}
+    path.write_text(_json.dumps(raw), encoding="utf-8")
+    import pytest as _pytest
+    from actp.plan_store import PlanStoreError
+    with _pytest.raises(PlanStoreError):
+        store.load()

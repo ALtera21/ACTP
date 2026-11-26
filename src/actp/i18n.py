@@ -33,8 +33,23 @@ ID: dict[str, str] = {
     "Close profitable only": "Tutup yang profit saja",
     "Cancel sell orders": "Batalkan order sell",
     "Cancel buy orders": "Batalkan order buy",
-    "Auto-TP: when all layers of a side fill, move TP to the first entry":
-        "Auto-TP: saat semua layer satu sisi terisi, pindahkan TP ke entry pertama",
+    "Auto-TP: when price is": "Auto-TP: saat harga",
+    "TP proximal when prices hit {price}": "TP ke proximal saat harga menyentuh {price}",
+    "Auto-TP is prioritized over manual TP update": "Auto-TP diprioritaskan di atas update TP manual",
+    "Off (default): a TP you set by hand, with the update TP button or by dragging it in MetaTrader, is respected. Auto-TP leaves that plan side alone.\n\nOn: when the price reaches its percent, Auto-TP moves the TP to proximal even if you set the TP by hand, and stops ACTP from watching the level you set. It still acts only once per plan side.":
+        "Mati (default): TP yang Anda atur manual, dengan tombol update TP atau dengan menggesernya di MetaTrader, dihormati. Auto-TP tidak menyentuh sisi plan itu.\n\nHidup: saat persen harga tercapai, Auto-TP memindahkan TP ke proximal walaupun TP diatur manual, dan ACTP berhenti memantau level yang Anda atur. Tetap hanya bekerja sekali per sisi plan.",
+    "WARN: could not save the Auto-TP priority: {why}": "PERINGATAN: prioritas Auto-TP tidak bisa disimpan: {why}",
+    "% into a side's range, move TP to proximal": "% di dalam range satu sisi, pindahkan TP ke proximal",
+    "How far into a side's range the price must go (1 to 100): 0% is the first entry (proximal), 100% the last one (distal). The deepest point the price reached counts, even if it came back. A buy side follows the ask, a sell side the bid. At least one position must be open.":
+        "Seberapa jauh harga harus masuk ke range satu sisi (1 sampai 100): 0% adalah entry pertama (proximal), 100% yang terakhir (distal). Titik terdalam yang pernah dicapai harga dihitung, walau harga sudah kembali. Sisi buy mengikuti ask, sisi sell mengikuti bid. Minimal satu posisi harus terbuka.",
+    "Auto remove PLAN's side that has 0 positions open and": "Hapus sisi PLAN yang tidak punya posisi terbuka dan",
+    "% into a side's range": "% di dalam range satu sisi",
+    "Works like the Auto-TP percent: how far into a side's range the price must have gone (1 to 100). When it did, and the side has no open position left, its leftover pending orders are cancelled.": "Bekerja seperti persen Auto-TP: seberapa jauh harga harus sudah masuk ke range satu sisi (1 sampai 100). Jika sudah, dan sisi itu tidak punya posisi terbuka lagi, sisa pending order-nya dibatalkan.",
+    "ACTP remembers the deepest point the price reached in a side's range, so a dip that comes back still counts. The memory is saved with the plans, so restarting ACTP (a theme or settings change) does not forget it. Auto-TP and Auto remove both use it.": "ACTP mengingat titik terdalam yang dicapai harga di range satu sisi, jadi penurunan yang lalu kembali tetap dihitung. Ingatan ini disimpan bersama plan, jadi memulai ulang ACTP (ganti tema atau pengaturan) tidak melupakannya. Auto-TP dan Auto remove sama-sama memakainya.",
+    "WARN: could not save the Auto-remove choice: {why}": "PERINGATAN: pilihan Auto remove tidak bisa disimpan: {why}",
+    "WARN: could not save the Auto-remove percent: {why}": "PERINGATAN: persen Auto remove tidak bisa disimpan: {why}",
+    "AUTO-REMOVE: {name} {side} has 0 positions open and the price went {pct}% into its range. {n} pending order(s) removed.": "AUTO-REMOVE: {name} {side} tidak punya posisi terbuka dan harga sudah {pct}% masuk ke rangenya. {n} pending order dihapus.",
+    "WARN: could not save the Auto-TP percent: {why}": "PERINGATAN: persen Auto-TP tidak bisa disimpan: {why}",
     "Status: running": "Status: berjalan",
     "Status: HALTED - {reason}": "Status: BERHENTI - {reason}",
     "Live plans (each plan has its own Cut Loss):":
@@ -75,8 +90,13 @@ ID: dict[str, str] = {
     "add sell PO range": "tambah range PO sell",
     "add both buy and sell PO range": "tambah range PO buy dan sell",
     "Clear fields": "Hapus isian",
-    "Layers and lots come from the MultiLayer / Layer amount boxes below. Leave a price empty to use the default shown next to it. A side with an empty range is left out.":
-        "Layer dan lot diambil dari kotak MultiLayer / Jumlah layer di bawah. Kosongkan harga untuk memakai nilai bawaan di sebelahnya. Sisi dengan range kosong tidak dipakai.",
+    "Layers and lots come from the MultiLayer / Layer amount boxes below. Leave a price empty to use the default shown next to it. A side with an empty range is left out. Type just one price on both the buy and the sell side and press 'add both': the sell price is the ceiling and the buy price is the floor of the plan, and ACTP works out the rest.":
+        "Layer dan lot diambil dari kotak MultiLayer / Jumlah layer di bawah. Kosongkan harga untuk memakai nilai bawaan di sebelahnya. Sisi dengan range kosong tidak dipakai. Ketik hanya satu harga di sisi buy dan sell lalu tekan 'add both': harga sell menjadi batas atas dan harga buy menjadi batas bawah plan, ACTP menghitung sisanya.",
+    "distal floor: the range will be {a} - {b}": "distal (batas bawah): range akan menjadi {a} - {b}",
+    "distal ceiling: the range will be {a} - {b}": "distal (batas atas): range akan menjadi {a} - {b}",
+    "empty = the middle of both distals: {price}": "kosong = tengah-tengah kedua distal: {price}",
+    "The SELL price must be above the BUY price (SELL is the ceiling, BUY is the floor).": "Harga SELL harus di atas harga BUY (SELL adalah batas atas, BUY batas bawah).",
+    "The BUY and SELL prices are too close together.": "Harga BUY dan SELL terlalu berdekatan.",
     "empty = 30% of the range {dir} it": "kosong = 30% dari range, {dir}nya",
     "empty = 30% of the range {dir} it: {price}": "kosong = 30% dari range, {dir}nya: {price}",
     "empty = 1:1 of the range, {dir} it": "kosong = 1:1 dari range, {dir}nya",
@@ -129,10 +149,13 @@ ID: dict[str, str] = {
     "WARN: chart lines not written: {x}": "PERINGATAN: garis chart tidak ditulis: {x}",
     "WARN: chart lines failed: {x}": "PERINGATAN: garis chart gagal: {x}",
     "ALERT: Auto-TP halted the manager: {exc}": "PERINGATAN: Auto-TP menghentikan manajer: {exc}",
-    "AUTO-TP: all {side} layers filled. TP moved to {t} on {n} positions.":
-        "AUTO-TP: semua layer {side} terisi. TP dipindah ke {t} pada {n} posisi.",
-    "AUTO-TP: all {side} layers filled, but price is already past {t}. TP not moved yet; retrying.":
-        "AUTO-TP: semua layer {side} terisi, tetapi harga sudah melewati {t}. TP belum dipindah; mencoba lagi.",
+    "AUTO-TP: price reached {pct}% of the {side} range. TP moved to {t} on {n} positions.":
+        "AUTO-TP: harga mencapai {pct}% dari range {side}. TP dipindah ke {t} pada {n} posisi.",
+    "AUTO-TP: price reached {pct}% of the {side} range, but it is already past {t}. TP not moved yet; retrying.":
+        "AUTO-TP: harga mencapai {pct}% dari range {side}, tetapi sudah melewati {t}. TP belum dipindah; mencoba lagi.",
+    "The Auto-TP percent must be a number.": "Persen Auto-TP harus berupa angka.",
+    "The Auto-TP percent must be from 1 to 100.": "Persen Auto-TP harus dari 1 sampai 100.",
+    "Auto-TP percent must be from 1 to 100.": "Persen Auto-TP harus dari 1 sampai 100.",
     "AUTO-TP: MT5 refused the TP change on {side} ({n} moved). Retrying.":
         "AUTO-TP: MT5 menolak perubahan TP pada {side} ({n} dipindah). Mencoba lagi.",
     "MONITOR ERROR: {x}": "ERROR MONITOR: {x}",
@@ -231,6 +254,11 @@ ID: dict[str, str] = {
     "(next plan)": "(plan berikutnya)",
     "LIVE - SERVER - {server}": "LIVE - SERVER - {server}",
     "LIVE - No server found": "LIVE - Server tidak ditemukan",
+    "SATT link ready: {x}": "Tautan SATT siap: {x}",
+    "SATT link not started: {x}": "Tautan SATT tidak dimulai: {x}",
+    "SATT link error: {x}": "Error tautan SATT: {x}",
+    "SATT plan received.": "Plan dari SATT diterima.",
+    "SATT plan ignored: it was older than {n} seconds.": "Plan SATT diabaikan: usianya lebih dari {n} detik.",
     "Language": "Bahasa",
     "Change theme": "Ganti tema",
     "Theme changed. It applies after a restart.\n\nRestart ACTP now? Cut Loss monitoring pauses for a few seconds; open orders keep their broker SL/TP.":
@@ -267,6 +295,62 @@ ID: dict[str, str] = {
     "Plan table: cancel PO + close one side": "Tabel plan: batalkan PO + tutup satu sisi",
     "Plan table: cancel entire plan": "Tabel plan: batalkan seluruh plan",
     "Quit ACTP": "Keluar dari ACTP",
+    "Plan table: Update TP when the price is already past it":
+        "Tabel plan: Update TP saat harga sudah melewatinya",
+    # ---- manual TP ----
+    "Update TP also changes pending orders": "Update TP juga mengubah order pending",
+    "Off: the update TP button only changes the TP of open positions.\nOn: pending orders get the new TP too.":
+        "Mati: tombol update TP hanya mengubah TP posisi yang terbuka.\nHidup: order pending juga mendapat TP baru.",
+    "Update TP ({plan} {side})": "Update TP ({plan} {side})",
+    "TP price for the {side} side of {plan}. Type a price, then press the update button.":
+        "Harga TP untuk sisi {side} dari {plan}. Ketik harga, lalu tekan tombol update.",
+    "Update TP": "Update TP",
+    "The price is already past {typed}. Setting this TP closes the open {side} positions of plan {name} right now.\n\nContinue?":
+        "Harga sudah melewati {typed}. Memasang TP ini langsung menutup posisi {side} yang terbuka dari plan {name}.\n\nLanjutkan?",
+    "NOT UPDATED: {why}": "TIDAK DIUBAH: {why}",
+    "The TP must be a price, for example 4120.50.": "TP harus berupa harga, misalnya 4120.50.",
+    "The TP must be a price above 0.": "TP harus berupa harga di atas 0.",
+    "This plan has no {side} side.": "Plan ini tidak punya sisi {side}.",
+    "This plan has no live {side} orders.": "Plan ini tidak punya order {side} yang aktif.",
+    "TP {tp} on {name} {side}: the price was already there. {n} position(s) closed.":
+        "TP {tp} pada {name} {side}: harga sudah di sana. {n} posisi ditutup.",
+    "TP {tp} saved for {name} {side}: no open positions yet, so MT5 was not changed.":
+        "TP {tp} disimpan untuk {name} {side}: belum ada posisi terbuka, jadi MT5 tidak diubah.",
+    "Tick 'Update TP also changes pending orders' to put the TP on the pending orders too.":
+        "Centang 'Update TP juga mengubah order pending' agar TP juga dipasang di order pending.",
+    "TP {tp} set on {name} {side}: {n} open position(s) updated in MT5.":
+        "TP {tp} dipasang pada {name} {side}: {n} posisi terbuka diperbarui di MT5.",
+    "TP {tp}: {n} pending order(s) of {name} {side} updated too.":
+        "TP {tp}: {n} order pending dari {name} {side} ikut diperbarui.",
+    "ACTP is also watching the price: when it reaches {tp}, the open {side} positions of {name} are closed.":
+        "ACTP juga memantau harga: saat mencapai {tp}, posisi {side} yang terbuka dari {name} ditutup.",
+    "WARN: MT5 refused the TP on {n} open position(s) of {name} {side} (it is on the wrong side of the price). ACTP's price watch covers them.":
+        "PERINGATAN: MT5 menolak TP pada {n} posisi terbuka dari {name} {side} (letaknya di sisi harga yang salah). Pemantauan harga ACTP yang menanganinya.",
+    "WARN: {n} pending order(s) of {name} {side} kept their old TP (MT5 refused the new one).":
+        "PERINGATAN: {n} order pending dari {name} {side} tetap memakai TP lama (MT5 menolak yang baru).",
+    "TP HIT: {name} {side} reached {tp}. {n} position(s) closed.":
+        "TP TERCAPAI: {name} {side} mencapai {tp}. {n} posisi ditutup.",
+    "TP FAILED: {why}\nCheck MT5 by hand NOW.": "TP GAGAL: {why}\nPeriksa MT5 secara manual SEKARANG.",
+    "ALERT: the TP watch halted the manager: {why}\nCheck MT5 by hand NOW.":
+        "PERINGATAN: pemantauan TP menghentikan manajer: {why}\nPeriksa MT5 secara manual SEKARANG.",
+    "Took {n} s.": "Butuh {n} dtk.",
+    # ---- re-entry ----
+    "Plan table: re-entry (refresh one side of a plan)":
+        "Tabel plan: re-entry (segarkan satu sisi plan)",
+    "re-entry {side} ({plan})": "re-entry {side} ({plan})",
+    "price: {low} - {high}   pips: {pips}": "harga: {low} - {high}   pip: {pips}",
+    "re-entry {word} range with the same layer amount and lot as before":
+        "re-entry range {word} dengan jumlah layer dan lot yang sama seperti sebelumnya",
+    "re-entry {word} range with the current layer amount and lot":
+        "re-entry range {word} dengan jumlah layer dan lot saat ini",
+    "Re-entry {side}": "Re-entry {side}",
+    "Re-enter the {side} side of plan {plan}?\n\nCancel {p} pending order(s) and close {o} open position(s) at market, then place {n} layers on {low} - {high} ({lots}).\n\nCut Loss, SL and TP stay as before. The other side and other plans are not touched.":
+        "Re-entry sisi {side} dari plan {plan}?\n\nBatalkan {p} order pending dan tutup {o} posisi terbuka di harga pasar, lalu pasang {n} layer di {low} - {high} ({lots}).\n\nCut Loss, SL dan TP tetap seperti sebelumnya. Sisi lain dan plan lain tidak disentuh.",
+    "NOT RE-ENTERED: {why}": "RE-ENTRY TIDAK DILAKUKAN: {why}",
+    "RE-ENTRY FAILED: {why}\nCheck MT5 by hand NOW, then Reconcile and press re-entry again.":
+        "RE-ENTRY GAGAL: {why}\nPeriksa MT5 secara manual SEKARANG, lalu Reconcile dan tekan re-entry lagi.",
+    "Re-entry {plan} {side}: {c} cancelled, {k} closed, {n} layers placed ({m} at market).":
+        "Re-entry {plan} {side}: {c} dibatalkan, {k} ditutup, {n} layer dipasang ({m} di harga pasar).",
 }
 
 _LEVELS = (("ALERT: ", "PERINGATAN: "), ("WARN: ", "PERINGATAN: "),

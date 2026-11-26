@@ -30,6 +30,9 @@ except ValueError as _exc:
 # ---- Editable in the settings window (stored in settings.json) ----------
 SYMBOL = _v["symbol"]                       # your broker's XAUUSD symbol
 LOT_PER_ORDER = Decimal(_v["lot_per_order"])
+# Size of one pip in price units, for the pips shown in the re-entry window
+# (XAUUSD: 1 pip = 0.10). Change it here if you count pips differently.
+PIP_SIZE = Decimal("0.1")
 AUTO_CUT_LOSS = _v["auto_cut_loss"]
 CUT_LOSS_HOLD_SECONDS = _v["cut_loss_hold_seconds"]
 SCL_ENABLED = _v["scl_enabled"]
@@ -44,6 +47,11 @@ CONFIRM: dict[str, bool] = dict(_v["confirm"])
 LANGUAGE = _v["language"]
 THEME = _v["theme"]
 AUTO_TP = _v["auto_tp"]
+TP_INCLUDE_PENDING = _v["tp_include_pending"]
+AUTO_TP_PERCENT = Decimal(_v["auto_tp_percent"])
+AUTO_TP_PRIORITY = _v["auto_tp_priority"]
+AUTO_REMOVE = _v["auto_remove"]
+AUTO_REMOVE_PERCENT = Decimal(_v["auto_remove_percent"])
 
 # ---- Fixed ---------------------------------------------------------------
 # The symbol the signal provider writes in its messages.

@@ -11,6 +11,16 @@ low..high and width = high - low:
 - Stop Loss: <multiple from Settings> x width below the range
                                                 -> low - multiple x width
 - Take Profit: 1:1, one width ABOVE the range   -> high + width
+
+One price on each side (the "both" button): the typed prices are the two
+DISTAL ends of the plan, the SELL price the ceiling and the BUY price the
+floor. With span = ceiling - floor, the plan is laid out as fibonacci-style
+levels (0 = floor, 1 = ceiling):
+    0     BUY distal          0.5   TP of both sides
+    0.25  BUY proximal        0.75  SELL proximal
+    1     SELL distal
+and the defaults above then give Cut Loss -0.075 / 1.075 and (with the
+default multiple of 3) Stop Loss -0.75 / 1.75.
 """
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -58,6 +68,46 @@ def _q(value: Decimal) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
+def single_price(first: str, second: str, side: str) -> Decimal | None:
+    """The one price typed in a range, or None when both boxes or neither
+    box are filled."""
+    name = side.upper()
+    a = parse_price(first, f"{name} range")
+    b = parse_price(second, f"{name} range")
+    if (a is None) == (b is None):
+        return None
+    return a if a is not None else b
+
+
+def distal_layout(floor: Decimal, ceiling: Decimal) -> dict[str, object]:
+    """BUY distal = floor, SELL distal = ceiling. Each proximal end sits a
+    quarter of the span in from its distal end, so the TP of both sides is
+    exactly in the middle."""
+    if ceiling <= floor:
+        raise ValueError(
+            "The SELL price must be above the BUY price (SELL is the "
+            "ceiling, BUY is the floor).")
+    span = ceiling - floor
+    if span < Decimal("0.04"):
+        raise ValueError("The BUY and SELL prices are too close together.")
+    quarter = _q(span / 4)
+    return {
+        "buy": (floor, _q(floor + quarter)),
+        "sell": (_q(ceiling - quarter), ceiling),
+        "tp": _q(floor + span / 2),
+    }
+
+
+def auto_layout(fields: dict[str, str]) -> dict[str, object] | None:
+    """The layout when BUY and SELL each have exactly one price typed,
+    else None."""
+    buy = single_price(fields["buy_a"], fields["buy_b"], "buy")
+    sell = single_price(fields["sell_a"], fields["sell_b"], "sell")
+    if buy is None or sell is None:
+        return None
+    return distal_layout(buy, sell)
+
+
 def default_cut_loss(side: str, low: Decimal, high: Decimal) -> Decimal:
     offset = (high - low) * CUT_LOSS_FRACTION
     return _q(low - offset) if side == "buy" else _q(high + offset)
@@ -93,9 +143,13 @@ def build_side(
     sl: str,
     tp: str,
     sl_multiple: Decimal,
+    given_range: tuple[Decimal, Decimal] | None = None,
+    default_tp: Decimal | None = None,
 ) -> ManualSide | None:
-    """None when the range is blank (the side is not part of the plan)."""
-    rng = parse_range(first, second, side)
+    """None when the range is blank (the side is not part of the plan).
+    `given_range` replaces the two range boxes and `default_tp` the 1:1
+    take profit (used by the one-price-per-side layout)."""
+    rng = given_range or parse_range(first, second, side)
     if rng is None:
         return None
     low, high = rng
@@ -109,7 +163,8 @@ def build_side(
         sl=stop if stop is not None
         else default_stop_loss(side, low, high, sl_multiple),
         tp=profit if profit is not None
-        else default_take_profit(side, low, high),
+        else (default_tp if default_tp is not None
+              else default_take_profit(side, low, high)),
     )
 
 
@@ -120,12 +175,15 @@ def collect(
     (range), '<side>_cl', '<side>_sl', '<side>_tp'. With 'both', a side whose
     range is blank is simply left out."""
     wanted = SIDES if which == "both" else (which,)
+    layout = auto_layout(fields) if which == "both" else None
     out: list[ManualSide] = []
     for side in wanted:
         built = build_side(
             side, fields[f"{side}_a"], fields[f"{side}_b"],
             fields[f"{side}_cl"], fields[f"{side}_sl"], fields[f"{side}_tp"],
             sl_multiple,
+            given_range=None if layout is None else layout[side],
+            default_tp=None if layout is None else layout["tp"],
         )
         if built is None:
             if which != "both":
@@ -162,11 +220,22 @@ def default_notes(
     side: str, fields: dict[str, str], sl_multiple: Decimal
 ) -> dict[str, str]:
     """Grey hints under the empty boxes: what ACTP will use."""
-    notes = {"cl": "", "sl": "", "tp": ""}
+    notes = {"range": "", "cl": "", "sl": "", "tp": ""}
+    try:
+        layout = auto_layout(fields)  # one price typed on each side
+    except ValueError:
+        layout = None
     try:
         rng = parse_range(fields[f"{side}_a"], fields[f"{side}_b"], side)
     except ValueError:
         rng = None
+    tp_default = None
+    if layout is not None:  # one price per side: the rest is worked out
+        rng = layout[side]
+        tp_default = layout["tp"]
+        notes["range"] = (
+            f"distal {'floor' if side == 'buy' else 'ceiling'}: the range "
+            f"will be {_money(rng[0])} - {_money(rng[1])}")
     direction = "below" if side == "buy" else "above"
     if not fields[f"{side}_cl"].strip():
         notes["cl"] = f"empty = 30% of the range {direction} it" + (
@@ -179,6 +248,9 @@ def default_notes(
                if rng else ""))
     if not fields[f"{side}_tp"].strip():
         away = "above" if side == "buy" else "below"
-        notes["tp"] = f"empty = 1:1 of the range, {away} it" + (
-            f": {_money(default_take_profit(side, *rng))}" if rng else "")
+        if tp_default is not None:
+            notes["tp"] = f"empty = the middle of both distals: {_money(tp_default)}"
+        else:
+            notes["tp"] = f"empty = 1:1 of the range, {away} it" + (
+                f": {_money(default_take_profit(side, *rng))}" if rng else "")
     return notes

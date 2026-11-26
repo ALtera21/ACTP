@@ -5,7 +5,9 @@ from actp.config import SYMBOL
 from actp.price_calculator import calculate_entry_prices
 from actp.layers import volumes_for
 
-def build_plan_preview(plan: dict[str, Any]) -> list[dict[str, Any]]:
+def build_plan_preview(
+    plan: dict[str, Any], lot: Any = None
+) -> list[dict[str, Any]]:
     """
     Build a dry-run preview of pending orders from a parsed PLAN.
 
@@ -39,7 +41,8 @@ def build_plan_preview(plan: dict[str, Any]) -> list[dict[str, Any]]:
             layers=layers,
         )
 
-        volumes = volumes_for(side, details, config.LOT_PER_ORDER)
+        volumes = volumes_for(
+            side, details, config.LOT_PER_ORDER if lot is None else lot)
         for price, volume in zip(prices, volumes):
             orders.append(
                 {

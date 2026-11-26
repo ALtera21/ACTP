@@ -34,11 +34,12 @@ from actp import shortcut
 from actp import theme
 from actp.dispatcher import Dispatcher
 from actp.execution import (
-    ExecutionHalted, ExecutionManager, plan_id, position_in_profit)
+    ExecutionHalted, ExecutionManager, auto_tp_trigger_price, plan_id,
+    position_in_profit)
 from actp.monitor import CutLossMonitor
 from actp.plan_store import JsonPlanStore
 from actp.layers import (
-    MAX_LAYERS, MIN_LAYERS, lots_for_weights, parse_layer_amount,
+    MAX_LAYERS, MIN_LAYERS, fmt_weight, lots_for_weights, parse_layer_amount,
     resolve_weights, summarize_lots,
 )
 from actp.manual import SIDES, build_plan_text, collect, default_notes
@@ -59,7 +60,7 @@ RED_TEXT = P["red_text"]
 DANGER_BG = P["danger_bg"]
 BUY_GREEN = "#2e7d32"
 SELL_RED = "#d30404"   # a lighter orange-red, so it can't be mistaken for KILL ALL (#b00020)
-VERSION = "2.0.2"
+VERSION = "2.1.0"
 
 RISK_TEXT = (
     "ACTP places REAL orders on whichever MetaTrader 5 account is logged in, "
@@ -217,6 +218,7 @@ def apply_theme(root: tk.Tk, name: str) -> None:
     for pattern, value in {
         "*Background": p["bg"], "*Foreground": p["fg"],
         "*Entry.Background": p["entry"], "*Text.Background": p["entry"],
+        "*Entry.disabledBackground": p["bg"],  # the greyed-out Auto-TP box
         "*Entry.insertBackground": p["fg"], "*Text.insertBackground": p["fg"],
         "*Button.Background": p["button"],
         "*Button.activeBackground": p["button_hover"],
@@ -296,6 +298,83 @@ def install_language(code: str) -> None:
         return original_show(i18n.tr(title), i18n.tr(message), *args, **kwargs)
 
     mb._show = show
+
+
+DEPTH_INFO = (
+    "ACTP remembers the deepest point the price reached in a side's range, "
+    "so a dip that comes back still counts. The memory is saved with the "
+    "plans, so restarting ACTP (a theme or settings change) does not forget "
+    "it. Auto-TP and Auto remove both use it.")
+
+
+class ReentryMenu(tk.Toplevel):
+    """A small menu beside a button (like MetaTrader's right-click menu):
+    one line of information and two choices. Closes when a choice is made,
+    on Esc, or when anything else is clicked."""
+
+    def __init__(self, anchor: tk.Widget, info: str,
+                 choices: list[tuple[str, Any]], note: str = "") -> None:
+        super().__init__(anchor)
+        self._closed = False
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        frame = tk.Frame(self, highlightthickness=1,
+                         highlightbackground=P["border"])
+        frame.pack()
+        tk.Label(frame, text=info, anchor="w", font=("TkDefaultFont", 9, "bold")
+                 ).pack(fill="x", padx=8, pady=(6, 2))
+        if note:
+            tk.Label(frame, text=note, anchor="w", fg=P["muted"]
+                     ).pack(fill="x", padx=8, pady=(0, 2))
+        for text, command in choices:
+            tk.Button(
+                frame, text=text, anchor="w", justify="left", relief="flat",
+                wraplength=300, cursor="hand2",
+                command=lambda c=command: self.choose(c),
+            ).pack(fill="x", padx=4, pady=2)
+        self.update_idletasks()
+        x = anchor.winfo_rootx() + anchor.winfo_width() + 2
+        y = anchor.winfo_rooty()
+        width, height = self.winfo_reqwidth(), self.winfo_reqheight()
+        if x + width > self.winfo_screenwidth():  # no room on the right
+            x = max(0, anchor.winfo_rootx() - width - 2)
+        y = max(0, min(y, self.winfo_screenheight() - height - 40))
+        self.geometry(f"+{x}+{y}")
+        self.bind("<Escape>", lambda _e: self.close())
+        self.after(500, self.check_focus)
+        self._click = anchor.winfo_toplevel().bind_all(
+            "<Button-1>", self.outside_click, add="+")
+        self.focus_force()
+
+    def check_focus(self) -> None:
+        """The menu stays above everything while it is open, so it goes
+        away as soon as another application gets the focus."""
+        if self._closed:
+            return
+        try:
+            if self.focus_displayof() is None:
+                self.close()
+                return
+            self.after(300, self.check_focus)
+        except tk.TclError:
+            pass
+
+    def outside_click(self, event: tk.Event) -> None:
+        if self._closed:  # the click handler outlives the window
+            return
+        if not str(event.widget).startswith(str(self)):
+            self.close()
+
+    def choose(self, command: Any) -> None:
+        self.close()
+        command()
+
+    def close(self) -> None:
+        self._closed = True
+        try:
+            self.destroy()
+        except tk.TclError:
+            pass
 
 
 class Tooltip:
@@ -751,6 +830,44 @@ class SettingsDialog:
         except ValueError:
             return config.AUTO_TP
 
+    @staticmethod
+    def current_auto_tp_percent() -> str:
+        """The Auto-TP percent saves itself to the file; keep that value."""
+        try:
+            return cfg.load(config.SETTINGS_PATH)["auto_tp_percent"]
+        except ValueError:
+            return str(config.AUTO_TP_PERCENT)
+
+    @staticmethod
+    def current_auto_remove() -> bool:
+        try:
+            return cfg.load(config.SETTINGS_PATH)["auto_remove"]
+        except ValueError:
+            return config.AUTO_REMOVE
+
+    @staticmethod
+    def current_auto_remove_percent() -> str:
+        try:
+            return cfg.load(config.SETTINGS_PATH)["auto_remove_percent"]
+        except ValueError:
+            return str(config.AUTO_REMOVE_PERCENT)
+
+    @staticmethod
+    def current_auto_tp_priority() -> bool:
+        """The priority tick box saves itself to the file; keep that value."""
+        try:
+            return cfg.load(config.SETTINGS_PATH)["auto_tp_priority"]
+        except ValueError:
+            return config.AUTO_TP_PRIORITY
+
+    @staticmethod
+    def current_tp_pending() -> bool:
+        """The Update-TP pending-orders tick box saves itself to the file."""
+        try:
+            return cfg.load(config.SETTINGS_PATH)["tp_include_pending"]
+        except ValueError:
+            return config.TP_INCLUDE_PENDING
+
     def save(self) -> None:
         try:
             raw = {
@@ -769,6 +886,11 @@ class SettingsDialog:
                 "confirm": {k: v.get() for k, v in self.ask.items()},
                 "theme": self.current_theme(),
                 "auto_tp": self.current_auto_tp(),
+                "tp_include_pending": self.current_tp_pending(),
+                "auto_tp_percent": self.current_auto_tp_percent(),
+                "auto_tp_priority": self.current_auto_tp_priority(),
+                "auto_remove": self.current_auto_remove(),
+                "auto_remove_percent": self.current_auto_remove_percent(),
                 "language": next(
                     (c for c, n in i18n.LANGUAGES.items()
                      if n == self.lang.get()), "en"),
@@ -859,6 +981,24 @@ class App:
         self.dispatcher = Dispatcher(manager)
         self.auto_tp = tk.BooleanVar(value=config.AUTO_TP)
         self.auto_tp.trace_add("write", self.save_auto_tp)
+        self.auto_tp_percent = tk.StringVar(value=str(config.AUTO_TP_PERCENT))
+        self._auto_tp_pct = config.AUTO_TP_PERCENT  # the last valid number
+        self.auto_tp_percent.trace_add("write", self.edit_auto_tp_percent)
+        self.auto_remove = tk.BooleanVar(value=config.AUTO_REMOVE)
+        self.auto_remove.trace_add("write", self.save_auto_remove)
+        self.auto_remove_percent = tk.StringVar(
+            value=str(config.AUTO_REMOVE_PERCENT))
+        self._auto_remove_pct = config.AUTO_REMOVE_PERCENT  # last valid number
+        self.auto_remove_percent.trace_add(
+            "write", self.edit_auto_remove_percent)
+        self.auto_tp_priority = tk.BooleanVar(value=config.AUTO_TP_PRIORITY)
+        self.auto_tp_priority.trace_add("write", self.save_auto_tp_priority)
+        self.tp_pending = tk.BooleanVar(value=config.TP_INCLUDE_PENDING)
+        self.tp_pending.trace_add("write", self.save_tp_pending)
+        self._tp_vars: dict[tuple[str, str], tk.StringVar] = {}
+        self._tp_shown: dict[tuple[str, str], str] = {}  # last value ACTP wrote
+        self._tp_widgets: set[str] = set()  # TP boxes and their update buttons
+        root.bind_all("<Button-1>", self.click_anywhere, add="+")
         self._tp_last: dict[str, str] = {}
         self.monitor = CutLossMonitor(manager) if config.AUTO_CUT_LOSS else None
         self._last_ok: datetime | None = None
@@ -866,7 +1006,7 @@ class App:
         self._chart_err_logged: str | None = None
 
         root.title(f"ACTP - v{VERSION}")
-        root.geometry("720x900")
+        root.geometry("860x900")
         root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         tk.Label(
@@ -962,11 +1102,59 @@ class App:
         tp_row = tk.Frame(root)
         tp_row.pack(fill="x", padx=8)
         tk.Checkbutton(
-            tp_row,
-            text="Auto-TP: when all layers of a side fill, move TP to the "
-                 "first entry",
-            variable=self.auto_tp,
+            tp_row, text="Auto-TP: when price is", variable=self.auto_tp,
         ).pack(side="left")
+        self.auto_tp_box = tk.Entry(
+            tp_row, textvariable=self.auto_tp_percent, width=5,
+            justify="right")
+        self.auto_tp_box.pack(side="left")
+        self.auto_tp_box.bind("<FocusOut>", self.fix_auto_tp_percent)
+        self.auto_tp_box.bind("<Return>", self.fix_auto_tp_percent)
+        Tooltip(self.auto_tp_box,
+                "How far into a side's range the price must go (1 to 100): "
+                "0% is the first entry (proximal), 100% the last one "
+                "(distal). The deepest point the price reached counts, even "
+                "if it came back. A buy side follows the ask, a sell side "
+                "the bid. At least one position must be open.")
+        tk.Label(tp_row, text="% into a side's range, move TP to proximal"
+                 ).pack(side="left")
+        self.make_info_icon(tp_row, DEPTH_INFO)
+        prio_row = tk.Frame(root)
+        prio_row.pack(fill="x", padx=8)
+        self.auto_tp_priority_check = tk.Checkbutton(
+            prio_row, text="Auto-TP is prioritized over manual TP update",
+            variable=self.auto_tp_priority)
+        self.auto_tp_priority_check.pack(side="left")
+        self.make_info_icon(
+            prio_row,
+            "Off (default): a TP you set by hand, with the update TP "
+                "button or by dragging it in MetaTrader, is respected. "
+                "Auto-TP leaves that plan side alone.\n\n"
+                "On: when the price reaches its percent, Auto-TP moves the "
+                "TP to proximal even if you set the TP by hand, and stops "
+                "ACTP from watching the level you set. It still acts only "
+                "once per plan side.")
+
+        remove_row = tk.Frame(root)
+        remove_row.pack(fill="x", padx=8)
+        tk.Checkbutton(
+            remove_row,
+            text="Auto remove PLAN's side that has 0 positions open and",
+            variable=self.auto_remove).pack(side="left")
+        self.auto_remove_box = tk.Entry(
+            remove_row, textvariable=self.auto_remove_percent, width=5,
+            justify="right")
+        self.auto_remove_box.pack(side="left")
+        self.auto_remove_box.bind("<FocusOut>", self.fix_auto_remove_percent)
+        self.auto_remove_box.bind("<Return>", self.fix_auto_remove_percent)
+        Tooltip(self.auto_remove_box,
+                "Works like the Auto-TP percent: how far into a side's range "
+                "the price must have gone (1 to 100). When it did, and the "
+                "side has no open position left, its leftover pending "
+                "orders are cancelled.")
+        tk.Label(remove_row, text="% into a side's range").pack(side="left")
+        self.make_info_icon(remove_row, DEPTH_INFO)
+        self.sync_auto_tp_box()
 
         info = tk.Frame(root)
         info.pack(fill="x", padx=8, pady=2)
@@ -990,8 +1178,17 @@ class App:
         self.tf_name = tk.Label(timer_box, text="", fg=P["muted"])
         self.tf_name.pack()
 
-        tk.Label(root, text="Live plans (each plan has its own Cut Loss):"
-                 ).pack(anchor="w", padx=8)
+        plans_head = tk.Frame(root)
+        plans_head.pack(fill="x", padx=8)
+        tk.Label(plans_head, text="Live plans (each plan has its own Cut Loss):"
+                 ).pack(side="left")
+        pending_check = tk.Checkbutton(
+            plans_head, text="Update TP also changes pending orders",
+            variable=self.tp_pending)
+        pending_check.pack(side="right")
+        Tooltip(pending_check,
+                "Off: the update TP button only changes the TP of open "
+                "positions.\nOn: pending orders get the new TP too.")
         self.build_plan_table(root)
         self._plans_read_at = 0.0
         self._plan_rows: list[dict[str, Any]] = []
@@ -1019,6 +1216,7 @@ class App:
                      "only by their broker SL/TP.")
         root.after(POLL_MS, self.poll)
         root.after(1000, self.tick_timers)
+        root.after(1000, self.watch_tp)
         self.refresh_status()
 
     # ---- helpers ---------------------------------------------------------
@@ -1363,6 +1561,9 @@ class App:
                 tk.Entry(rng, textvariable=var, width=11).pack(side="left")
                 if tail:
                     tk.Label(rng, text=tail).pack(side="left")
+            note = tk.Label(tab, text="", **grey)
+            note.grid(row=top, column=2, sticky="w", padx=8, pady=(6, 0))
+            self.mnotes[f"{side}_range"] = note
             for offset, (key, label) in enumerate(
                 (("cl", "cut loss"), ("sl", "stop loss"), ("tp", "take profit")),
                 start=1,
@@ -1390,7 +1591,11 @@ class App:
             tab, justify="left", fg=GREY, wraplength=640,
             text="Layers and lots come from the MultiLayer / Layer amount "
                  "boxes below. Leave a price empty to use the default shown "
-                 "next to it. A side with an empty range is left out.",
+                 "next to it. A side with an empty range is left out. "
+                 "Type just one price on both the buy and the sell side and "
+                 "press 'add both': the sell price is the ceiling and the "
+                 "buy price is the floor of the plan, and ACTP works out "
+                 "the rest.",
         ).grid(row=9, column=0, columnspan=3, sticky="w", padx=6)
         for var in self.mfields.values():
             var.trace_add("write", self.update_manual_notes)
@@ -1403,7 +1608,7 @@ class App:
         values = self.manual_values()
         for side in SIDES:
             notes = default_notes(side, values, config.STOP_LOSS_MULTIPLE)
-            for key in ("cl", "sl", "tp"):
+            for key in ("range", "cl", "sl", "tp"):
                 self.mnotes[f"{side}_{key}"].configure(text=notes[key])
 
     def clear_manual(self) -> None:
@@ -1478,8 +1683,9 @@ class App:
     # ---- live plans table ------------------------------------------------
 
     # column: (minsize, weight)
-    PLAN_COLS = ((78, 0), (66, 0), (150, 1), (30, 0),
-                 (150, 1), (30, 0), (96, 0), (30, 0))
+    PLAN_COLS = ((70, 0), (62, 0), (124, 1), (66, 0), (28, 0), (28, 0),
+                 (28, 0), (124, 1), (66, 0), (28, 0), (28, 0), (28, 0),
+                 (82, 0), (28, 0))
 
     def build_plan_table(self, parent: tk.Misc) -> None:
         box = tk.Frame(parent, highlightthickness=1,
@@ -1487,8 +1693,9 @@ class App:
         box.pack(fill="x", padx=8, pady=(0, 4))
         head = tk.Frame(box, bg=P["head_bg"])
         head.pack(fill="x")
-        titles = ("Plan", "Sent", "BUY (filled / pending, CL)", "",
-                  "SELL (filled / pending, CL)", "", "Cut loss candle", "")
+        titles = ("Plan", "Sent", "BUY (filled / pending, CL)", "TP", "", "",
+                  "", "SELL (filled / pending, CL)", "TP", "", "", "",
+                  "Cut loss candle", "")
         for c, (size, weight) in enumerate(self.PLAN_COLS):
             head.grid_columnconfigure(c, minsize=size, weight=weight)
             tk.Label(head, text=titles[c], bg=P["head_bg"], anchor="w",
@@ -1522,7 +1729,7 @@ class App:
                 -1 if e.delta > 0 else 1, "units"))
         self._plan_empty = tk.Label(
             self._plan_body, text="No live plans.", fg=P["muted"], anchor="w")
-        self._plan_empty.grid(row=0, column=0, columnspan=8, sticky="w",
+        self._plan_empty.grid(row=0, column=0, columnspan=14, sticky="w",
                               padx=4, pady=4)
 
     def _cell_button(self, name_key: str, row: dict[str, Any],
@@ -1543,12 +1750,286 @@ class App:
         Tooltip(button, tip)
         return button
 
+    def _tp_cells(self, row: dict[str, Any], side: str,
+                  colour: str) -> tuple[tk.Entry, tk.Button]:
+        """The TP box and its update button for one side of one plan."""
+        mid, plan = row["message_id"], row["name"]
+        var = tk.StringVar()
+        self._tp_vars[(mid, side)] = var
+        box = tk.Entry(self._plan_body, textvariable=var, width=8,
+                       justify="right")
+        box.bind("<Return>", lambda _e: self.update_tp(mid, plan, side))
+        # Leaving the box (or Esc) cancels what was typed.
+        box.bind("<FocusOut>", lambda _e: self.revert_tp(mid, side))
+        box.bind("<Escape>", lambda _e: self.revert_tp(mid, side))
+        Tooltip(box, f"TP price for the {side} side of {plan}. "
+                     "Type a price, then press the update button.")
+        button = tk.Button(
+            self._plan_body, text="\u21bb", width=2, bg=colour, fg="white",
+            activebackground=colour, activeforeground="white",
+            relief="flat", cursor="hand2",
+            command=lambda: self.update_tp(mid, plan, side))
+        Tooltip(button, f"Update TP ({plan} {side})")
+        self._tp_widgets.update((str(box), str(button)))
+        return box, button
+
+    def _reentry_button(self, row: dict[str, Any], side: str,
+                        colour: str) -> tk.Button:
+        mid, plan = row["message_id"], row["name"]
+        button = tk.Button(
+            self._plan_body, text="\u21c4", width=2, bg=colour, fg="white",
+            activebackground=colour, activeforeground="white",
+            relief="flat", cursor="hand2")
+        button.configure(
+            command=lambda: self.open_reentry(button, mid, plan, side))
+        Tooltip(button, f"re-entry {side.lower()} ({plan})")
+        return button
+
+    def open_reentry(self, button: tk.Button, mid: str, plan: str,
+                     side: str) -> None:
+        """The small window beside the button."""
+        old = getattr(self, "_reentry_menu", None)
+        if old is not None:
+            old.close()
+        try:
+            was = self.manager.side_settings(mid, side)
+        except ValueError as exc:
+            self.log(f"NOT RE-ENTERED: {exc}")
+            return
+        low, high = sorted((was["area_start"], was["area_end"]))
+        pips = ((high - low) / config.PIP_SIZE).quantize(Decimal("0.1"))
+        word = side.lower()
+        note = ""
+        if self.auto_tp.get():
+            trigger = auto_tp_trigger_price(
+                side, was["area_start"], was["area_end"], self._auto_tp_pct)
+            note = f"TP proximal when prices hit {trigger}"
+        self._reentry_menu = ReentryMenu(
+            button, f"price: {low} - {high}   pips: {pips}", note=note,
+            choices=
+            [(f"re-entry {word} range with the same layer amount and lot "
+              "as before",
+              lambda: self.reenter_ask(mid, plan, side, "same")),
+             (f"re-entry {word} range with the current layer amount and lot",
+              lambda: self.reenter_ask(mid, plan, side, "current"))])
+
+    def reenter_ask(self, mid: str, plan: str, side: str, mode: str) -> None:
+        """Cancel + close one side of a plan and place it again."""
+        try:
+            was = self.manager.side_settings(mid, side)
+            if mode == "same":
+                layers = was["layers"]
+                weights = was["weights"]
+                lot = was["lot"] or config.LOT_PER_ORDER
+            else:
+                chosen = resolve_weights(
+                    self.multi.get(), self.layers_var.get(),
+                    config.SAVED_MULTILAYERS)
+                layers = len(chosen)
+                weights = [fmt_weight(w) for w in chosen]
+                lot = config.LOT_PER_ORDER
+            lots = lots_for_weights(
+                [Decimal(w) for w in weights] if weights
+                else [Decimal(1)] * layers, lot)
+        except ValueError as exc:
+            self.log(f"NOT RE-ENTERED: {exc}")
+            return
+        snap = self.manager.snapshot()
+        if "error" in snap:
+            self.log(f"MT5 read failed: {snap['error']}")
+            return
+        mine = [o for o in snap["active"]
+                if plan_id(o) == mid and o.side == side]
+        pending = sum(1 for o in mine if o.status.value == "PENDING")
+        opened = sum(1 for o in mine if o.status.value == "FILLED")
+        low, high = sorted((was["area_start"], was["area_end"]))
+        if not confirm_action(
+            self.root, "reenter", f"Re-entry {side.lower()}",
+            f"Re-enter the {side} side of plan {plan}?\n\n"
+            f"Cancel {pending} pending order(s) and close {opened} open "
+            f"position(s) at market, then place {layers} layers on "
+            f"{low} - {high} ({summarize_lots(lots)}).\n\n"
+            "Cut Loss, SL and TP stay as before. The other side and other "
+            "plans are not touched.",
+        ):
+            return
+        started = time.monotonic()
+        try:
+            result = self.manager.reenter_side(mid, side, layers, weights, lot)
+        except ValueError as exc:
+            self.log(f"NOT RE-ENTERED: {exc}")
+        except ExecutionHalted as exc:
+            self.log(f"RE-ENTRY FAILED: {exc}\nCheck MT5 by hand NOW, then "
+                     "Reconcile and press re-entry again.")
+            self.alarm()
+        except Exception as exc:
+            self.log(f"RE-ENTRY ERROR: {exc!r}\nCheck MT5 by hand NOW.")
+            self.alarm()
+        else:
+            self.log(f"Re-entry {plan} {side}: {result['cancelled']} "
+                     f"cancelled, {result['closed']} closed, "
+                     f"{result['placed']} layers placed "
+                     f"({result['market']} at market).")
+            self.log_took(started)
+        finally:
+            self.dispatcher.forget_pending()
+            self.refresh_status()
+            self._plans_read_at = 0.0
+            self.refresh_plans()
+
+    def click_anywhere(self, event: tk.Event) -> None:
+        """A click anywhere except a TP box or its update button cancels
+        what was typed in the TP boxes (the click may land on a label, which
+        does not take the keyboard focus by itself)."""
+        if str(event.widget) in self._tp_widgets:
+            return
+        for mid, side in list(self._tp_vars):
+            self.revert_tp(mid, side)
+        try:
+            if str(self.root.focus_get()) in self._tp_widgets:
+                self.root.focus_set()
+        except Exception:  # Tk can fail to name a popup widget
+            pass
+
+    def revert_tp(self, mid: str, side: str) -> None:
+        """Put the TP in force back in the box (cancels an unsent edit)."""
+        var = self._tp_vars.get((mid, side))
+        shown = self._tp_shown.get((mid, side))
+        if var is not None and shown is not None and var.get() != shown:
+            var.set(shown)
+
+    def show_tp(self, mid: str, side: str, box: tk.Entry,
+                part: dict[str, Any]) -> None:
+        """Fill the TP box with the level in force, unless it is being
+        edited. The colour shows that ACTP is watching the price."""
+        target = part.get("tp_target")
+        shown = target or part.get("tp_live") or part.get("tp")
+        var = self._tp_vars.get((mid, side))
+        try:
+            focused = self.root.focus_get() is box
+        except Exception:  # Tk can fail to name a popup widget
+            focused = False
+        if var is not None and shown is not None and var.get() == str(shown):
+            self._tp_shown[(mid, side)] = str(shown)  # in step again
+        # Typed text that differs from what ACTP last wrote is being edited:
+        # leave it alone.
+        edited = (var is not None
+                  and var.get() != self._tp_shown.get((mid, side), ""))
+        if var is not None and shown is not None and not focused and not edited:
+            var.set(str(shown))
+            self._tp_shown[(mid, side)] = str(shown)
+        box.configure(fg=P["orange"] if target else P["fg"])
+
+    def update_tp(self, message_id: str, name: str, side: str) -> None:
+        """Set the TP typed in the box on one side of one plan."""
+        var = self._tp_vars.get((message_id, side))
+        typed = "" if var is None else var.get().strip()
+        include = bool(self.tp_pending.get())
+        try:
+            if self.manager.tp_would_close_now(message_id, side, typed):
+                if not confirm_action(
+                    self.root, "tp_past", "Update TP",
+                    f"The price is already past {typed}. Setting this TP "
+                    f"closes the open {side} positions of plan {name} "
+                    "right now.\n\nContinue?",
+                ):
+                    return
+            result = self.manager.set_plan_tp(
+                message_id, side, typed, include_pending=include,
+                auto_priority=bool(self.auto_tp.get()
+                                   and self.auto_tp_priority.get()))
+        except ValueError as exc:
+            self.log(f"NOT UPDATED: {exc}")
+            return
+        except ExecutionHalted as exc:
+            self.log(f"TP FAILED: {exc}\nCheck MT5 by hand NOW.")
+            self.alarm()
+            return
+        except Exception as exc:
+            self.log(f"TP ERROR: {exc!r}\nCheck MT5 by hand NOW.")
+            self.alarm()
+            return
+        finally:
+            self._plans_read_at = 0.0
+        if result["state"] == "CLOSED":
+            self.log(f"TP {typed} on {name} {side}: the price was already "
+                     f"there. {result['closed']} position(s) closed.")
+        else:
+            if result["open"]:
+                self.log(f"TP {typed} set on {name} {side}: "
+                         f"{result['hard_positions']} open position(s) "
+                         "updated in MT5.")
+            else:
+                self.log(f"TP {typed} saved for {name} {side}: no open "
+                         "positions yet, so MT5 was not changed.")
+                if not include:
+                    self.log("Tick 'Update TP also changes pending orders' "
+                             "to put the TP on the pending orders too.")
+            if include:
+                self.log(f"TP {typed}: {result['hard_pending']} pending "
+                         f"order(s) of {name} {side} updated too.")
+            self.log(f"ACTP is also watching the price: when it reaches "
+                     f"{typed}, the open {side} positions of {name} are "
+                     "closed.")
+            if result["refused_positions"]:
+                self.log(f"WARN: MT5 refused the TP on "
+                         f"{result['refused_positions']} open position(s) of "
+                         f"{name} {side} (it is on the wrong side of the "
+                         "price). ACTP's price watch covers them.")
+            if result["refused_pending"]:
+                self.log(f"WARN: {result['refused_pending']} pending "
+                         f"order(s) of {name} {side} kept their old TP "
+                         "(MT5 refused the new one).")
+        self.refresh_plans()
+
+    def watch_tp(self) -> None:
+        """Every second: when the price reaches a TP set by hand, close the
+        open positions of that plan side."""
+        try:
+            self.manager.track_price_depth()
+            if self.auto_remove.get():
+                for event in self.manager.remove_spent_sides(
+                        self._auto_remove_pct):
+                    pct = format(self._auto_remove_pct.normalize(), "f")
+                    self.log(f"AUTO-REMOVE: {event['name']} {event['side']} "
+                             f"has 0 positions open and the price went "
+                             f"{pct}% into its range. {event['removed']} "
+                             "pending order(s) removed.")
+                    self.dispatcher.forget_pending()
+                    self._plans_read_at = 0.0
+                    self.refresh_plans()
+            for event in self.manager.check_tp_targets():
+                self.log(f"TP HIT: {event['name']} {event['side']} reached "
+                         f"{event['tp']}. {event['closed']} position(s) "
+                         "closed.")
+                self._plans_read_at = 0.0
+                self.refresh_plans()
+        except ExecutionHalted as exc:
+            self.log(f"ALERT: the TP watch halted the manager: {exc}\n"
+                     "Check MT5 by hand NOW.")
+            self.alarm()
+        except Exception as exc:  # the watch must never die
+            self.log(f"TP WATCH ERROR: {exc!r}")
+        finally:
+            self.root.after(1000, self.watch_tp)
+
+    def save_tp_pending(self, *_args) -> None:
+        """Remember the pending-orders tick box for the next start-up."""
+        try:
+            cfg.update(config.SETTINGS_PATH,
+                       tp_include_pending=bool(self.tp_pending.get()))
+        except (ValueError, OSError, tk.TclError) as exc:
+            self.log(f"WARN: could not save the Update TP choice: {exc}")
+
     def fill_plan_table(self, rows: list[dict[str, Any]]) -> None:
         """Update the rows in place; rows of finished plans disappear."""
         live = {r["message_id"] for r in rows}
         for mid in [m for m in self._plan_widgets if m not in live]:
             for widget in self._plan_widgets.pop(mid)["all"]:
                 widget.destroy()
+            for side in ("BUY", "SELL"):
+                self._tp_vars.pop((mid, side), None)
+                self._tp_shown.pop((mid, side), None)
         if rows:
             self._plan_empty.grid_remove()
         else:
@@ -1568,20 +2049,28 @@ class App:
                     "cut": tk.Label(body, anchor="w"),
                 }
                 entry["btn_BUY"] = self._cell_button(
-                    "btn_BUY", row, BUY_GREEN, "BUY", grid_row, 3)
+                    "btn_BUY", row, BUY_GREEN, "BUY", grid_row, 6)
                 entry["btn_SELL"] = self._cell_button(
-                    "btn_SELL", row, SELL_RED, "SELL", grid_row, 5)
+                    "btn_SELL", row, SELL_RED, "SELL", grid_row, 11)
                 entry["btn_ALL"] = self._cell_button(
-                    "btn_ALL", row, P["plan_btn"], None, grid_row, 7)
+                    "btn_ALL", row, P["plan_btn"], None, grid_row, 13)
+                for side, colour in (("BUY", BUY_GREEN), ("SELL", SELL_RED)):
+                    box, button = self._tp_cells(row, side, colour)
+                    entry[f"tp_{side}"] = box
+                    entry[f"up_{side}"] = button
+                    entry[f"re_{side}"] = self._reentry_button(
+                        row, side, colour)
                 entry["all"] = [w for k, w in entry.items()
                                 if k != "all"]
                 self._plan_widgets[mid] = entry
             for widget, column in ((entry["name"], 0), (entry["sent"], 1),
-                                   (entry["BUY"], 2), (entry["SELL"], 4),
-                                   (entry["cut"], 6)):
+                                   (entry["BUY"], 2), (entry["SELL"], 7),
+                                   (entry["cut"], 12)):
                 widget.grid(row=grid_row, column=column, sticky="ew", padx=2)
-            for key, column in (("btn_BUY", 3), ("btn_SELL", 5),
-                                ("btn_ALL", 7)):
+            for key, column in (("tp_BUY", 3), ("up_BUY", 4), ("re_BUY", 5),
+                                ("btn_BUY", 6), ("tp_SELL", 8),
+                                ("up_SELL", 9), ("re_SELL", 10),
+                                ("btn_SELL", 11), ("btn_ALL", 13)):
                 entry[key].grid(row=grid_row, column=column, padx=2, pady=1)
             sent = row["sent_at"]
             entry["name"].configure(text=row["name"])
@@ -1595,7 +2084,10 @@ class App:
                     f"{part['filled']} / {part['pending']}"
                     + (f", CL {part['cut_loss']}" if part["cut_loss"] else ""))
                 if part is None:
-                    entry[f"btn_{side}"].grid_remove()
+                    for key in ("btn", "tp", "up", "re"):
+                        entry[f"{key}_{side}"].grid_remove()
+                else:
+                    self.show_tp(mid, side, entry[f"tp_{side}"], part)
             entry["cut"].configure(text=self.timer_text(row["timeframe"]))
 
     def close_plan_ask(self, message_id: str, name: str,
@@ -1620,6 +2112,7 @@ class App:
             f"position(s) of the {what}?\n\nOther plans are not touched.",
         ):
             return
+        started = time.monotonic()
         try:
             result = self.manager.close_plan(message_id, side)
         except ExecutionHalted as exc:
@@ -1631,6 +2124,7 @@ class App:
         else:
             self.log(f"Closed {what}: {result['cancelled']} cancelled, "
                      f"{result['closed']} closed.")
+            self.log_took(started)
         finally:
             self.dispatcher.forget_pending()
             self.refresh_status()
@@ -1658,8 +2152,100 @@ class App:
         except (ValueError, OSError) as exc:
             self.log(f"WARN: could not save the Layer amount: {exc}")
 
+    def make_info_icon(self, parent: tk.Misc, text: str) -> tk.Canvas:
+        """A small i inside a circle; hover for the explanation."""
+        icon = tk.Canvas(parent, width=16, height=16, highlightthickness=0,
+                         cursor="question_arrow")
+        icon.pack(side="left", padx=4)
+        icon.create_oval(1, 1, 15, 15, outline=P["fg"], width=1)
+        icon.create_text(8, 8, text="i", fill=P["fg"],
+                         font=("TkDefaultFont", 8, "bold"))
+        Tooltip(icon, text)
+        return icon
+
+    def save_auto_remove(self, *_args) -> None:
+        """Remember the Auto-remove tick box for the next start-up."""
+        self.sync_auto_tp_box()
+        try:
+            cfg.update(config.SETTINGS_PATH,
+                       auto_remove=bool(self.auto_remove.get()))
+        except (ValueError, OSError, tk.TclError) as exc:
+            self.log(f"WARN: could not save the Auto-remove choice: {exc}")
+
+    def edit_auto_remove_percent(self, *_args) -> None:
+        """Keep a valid percent as it is typed; a bad one is shown in red
+        and ignored (the last good number stays in use)."""
+        box = getattr(self, "auto_remove_box", None)
+        try:
+            value = cfg.validate({"auto_remove_percent":
+                                  self.auto_remove_percent.get().strip()}
+                                 )["auto_remove_percent"]
+        except ValueError:
+            if box is not None:
+                box.configure(bg=P["danger_bg"])
+            return
+        if box is not None:
+            box.configure(bg=P["entry"])
+        self._auto_remove_pct = Decimal(value)
+        try:
+            cfg.update(config.SETTINGS_PATH, auto_remove_percent=value)
+        except (ValueError, OSError) as exc:
+            self.log(f"WARN: could not save the Auto-remove percent: {exc}")
+
+    def fix_auto_remove_percent(self, _event=None) -> None:
+        """Leaving the box with a bad number puts the last good one back."""
+        self.auto_remove_percent.set(
+            format(self._auto_remove_pct.normalize(), "f"))
+
+    def sync_auto_tp_box(self) -> None:
+        """The percent box is only usable while Auto-TP is on."""
+        box = getattr(self, "auto_tp_box", None)
+        state = "normal" if self.auto_tp.get() else "disabled"
+        if box is not None:
+            box.configure(state=state)
+        check = getattr(self, "auto_tp_priority_check", None)
+        if check is not None:
+            check.configure(state=state)
+        remove_box = getattr(self, "auto_remove_box", None)
+        if remove_box is not None:
+            remove_box.configure(
+                state="normal" if self.auto_remove.get() else "disabled")
+
+    def save_auto_tp_priority(self, *_args) -> None:
+        """Remember the priority tick box for the next start-up."""
+        try:
+            cfg.update(config.SETTINGS_PATH,
+                       auto_tp_priority=bool(self.auto_tp_priority.get()))
+        except (ValueError, OSError, tk.TclError) as exc:
+            self.log(f"WARN: could not save the Auto-TP priority: {exc}")
+
+    def edit_auto_tp_percent(self, *_args) -> None:
+        """Keep a valid percent as it is typed; a bad one is shown in red
+        and ignored (the last good number stays in use)."""
+        box = getattr(self, "auto_tp_box", None)
+        try:
+            value = cfg.validate({"auto_tp_percent":
+                                  self.auto_tp_percent.get().strip()}
+                                 )["auto_tp_percent"]
+        except ValueError:
+            if box is not None:
+                box.configure(bg=P["danger_bg"])
+            return
+        if box is not None:
+            box.configure(bg=P["entry"])
+        self._auto_tp_pct = Decimal(value)
+        try:
+            cfg.update(config.SETTINGS_PATH, auto_tp_percent=value)
+        except (ValueError, OSError) as exc:
+            self.log(f"WARN: could not save the Auto-TP percent: {exc}")
+
+    def fix_auto_tp_percent(self, _event=None) -> None:
+        """Leaving the box with a bad number puts the last good one back."""
+        self.auto_tp_percent.set(format(self._auto_tp_pct.normalize(), "f"))
+
     def save_auto_tp(self, *_args) -> None:
         """Remember the Auto-TP tick box for the next start-up."""
+        self.sync_auto_tp_box()
         try:
             cfg.update(config.SETTINGS_PATH, auto_tp=bool(self.auto_tp.get()))
         except (ValueError, OSError, tk.TclError) as exc:
@@ -1668,20 +2254,23 @@ class App:
     # ---- auto TP ---------------------------------------------------------
     def run_auto_tp(self) -> None:
         try:
-            results = self.manager.move_tp_when_full()
+            results = self.manager.move_tp_when_full(
+                self._auto_tp_pct, bool(self.auto_tp_priority.get()))
         except ExecutionHalted as exc:
             self.log(f"ALERT: Auto-TP halted the manager: {exc}")
             self.alarm()
             return
+        pct = format(self._auto_tp_pct.normalize(), "f")
         for side, (state, target, count) in results.items():
             if self._tp_last.get(side) == state:
                 continue  # report each state once
             if state == "MOVED":
-                self.log(f"AUTO-TP: all {side} layers filled. TP moved to "
-                         f"{target} on {count} positions.")
+                self.log(f"AUTO-TP: price reached {pct}% of the {side} "
+                         f"range. TP moved to {target} on {count} positions.")
             elif state == "PRICE_PAST":
-                self.log(f"AUTO-TP: all {side} layers filled, but price is "
-                         f"already past {target}. TP not moved yet; retrying.")
+                self.log(f"AUTO-TP: price reached {pct}% of the {side} "
+                         f"range, but it is already past {target}. TP not "
+                         "moved yet; retrying.")
             else:
                 self.log(f"AUTO-TP: MT5 refused the TP change on {side} "
                          f"({count} moved). Retrying.")
@@ -1749,6 +2338,7 @@ class App:
             "position?\n\n(Orders not placed by ACTP are not touched.)",
         ):
             return
+        started = time.monotonic()
         try:
             result = self.manager.close_all()
         except ExecutionHalted as exc:
@@ -1760,6 +2350,7 @@ class App:
         else:
             self.log(f"KILL: {result['cancelled']} cancelled, "
                      f"{result['closed']} closed.")
+            self.log_took(started)
         finally:
             # A half-applied plan must not be resumed by re-sending it.
             self.dispatcher.forget_pending()
@@ -1783,6 +2374,7 @@ class App:
             f"Open {side} positions ({opened}) are NOT touched.",
         ):
             return
+        started = time.monotonic()
         try:
             result = self.manager.cancel_pending_side(side)
         except ExecutionHalted as exc:
@@ -1796,10 +2388,15 @@ class App:
                 f"Cancel {side}: {result['cancelled']} pending cancelled, "
                 f"{result['left_open']} open positions left."
             )
+            self.log_took(started)
         finally:
             # A half-applied plan must not be resumed by re-sending it.
             self.dispatcher.forget_pending()
             self.refresh_status()
+
+    def log_took(self, started: float) -> None:
+        """How long a bulk close / cancel took (to compare speeds)."""
+        self.log(f"Took {time.monotonic() - started:.1f} s.")
 
     def count_positions(self, only_profitable: bool) -> tuple[int, str]:
         snap = self.manager.snapshot()
@@ -1830,6 +2427,7 @@ class App:
         ):
             return
         label = "profitable positions" if only_profitable else "all positions"
+        started = time.monotonic()
         try:
             result = self.manager.close_positions(only_profitable)
         except Exception as exc:
@@ -1841,6 +2439,7 @@ class App:
                 f"{result['left_open']} left open, "
                 f"{result['left_pending']} pending orders left in place."
             )
+            self.log_took(started)
         self.refresh_status()
 
     def on_close(self) -> None:

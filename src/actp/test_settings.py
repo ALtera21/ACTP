@@ -121,3 +121,51 @@ def test_auto_tp_choice_is_saved_and_loaded(tmp_path):
     assert load(path)["auto_tp"] is True
     update(path, auto_tp=False)
     assert load(path)["auto_tp"] is False
+
+
+def test_update_tp_pending_choice_is_saved_and_defaults_on(tmp_path):
+    path = tmp_path / "settings.json"
+    assert load(path)["tp_include_pending"] is True
+    update(path, tp_include_pending=False)
+    assert load(path)["tp_include_pending"] is False
+    with pytest.raises(ValueError):
+        validate({"tp_include_pending": "yes"})
+
+
+def test_auto_tp_percent_defaults_to_100_and_is_checked(tmp_path):
+    path = tmp_path / "settings.json"
+    assert load(path)["auto_tp_percent"] == "100"
+    update(path, auto_tp_percent="50")
+    assert load(path)["auto_tp_percent"] == "50"
+    assert validate({"auto_tp_percent": "33.50"})["auto_tp_percent"] == "33.5"
+    for bad in ("0", "101", "abc", "", "nan"):
+        with pytest.raises(ValueError):
+            validate({"auto_tp_percent": bad})
+
+
+def test_auto_tp_priority_defaults_on_and_is_checked(tmp_path):
+    path = tmp_path / "settings.json"
+    assert load(path)["auto_tp_priority"] is True
+    update(path, auto_tp_priority=False)
+    assert load(path)["auto_tp_priority"] is False
+    with pytest.raises(ValueError):
+        validate({"auto_tp_priority": "yes"})
+
+
+def test_first_start_has_auto_tp_on_and_auto_remove_off(tmp_path):
+    values = load(tmp_path / "settings.json")
+    assert values["auto_tp"] is True
+    assert values["auto_remove"] is False
+    assert values["auto_remove_percent"] == "90"
+
+
+def test_auto_remove_settings_are_checked(tmp_path):
+    path = tmp_path / "settings.json"
+    update(path, auto_remove=True, auto_remove_percent="80.50")
+    assert load(path)["auto_remove"] is True
+    assert load(path)["auto_remove_percent"] == "80.5"
+    for bad in ("0", "101", "abc", ""):
+        with pytest.raises(ValueError):
+            validate({"auto_remove_percent": bad})
+    with pytest.raises(ValueError):
+        validate({"auto_remove": "yes"})

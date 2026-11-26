@@ -44,6 +44,15 @@ class StoredState:
     # the first candle that counts>}. A plan without an entry uses the legacy
     # hold-timer rule.
     cut_rules: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # TP levels set by hand that ACTP watches itself: message id -> {"BUY":
+    # price}. Old files have none.
+    tp_targets: dict[str, dict[str, Decimal]] = field(default_factory=dict)
+    # Deepest the price went into a plan side's range, percent: message id ->
+    # {"BUY": 63.5}. Kept so that a restart does not forget a dip.
+    depths: dict[str, dict[str, Decimal]] = field(default_factory=dict)
+    # The base lot (the Lot box) each plan was sent with, so a re-entry can
+    # use "the same lot as before". Old files have none.
+    base_lots: dict[str, Decimal] = field(default_factory=dict)
 
 
 class PlanStore(Protocol):
@@ -101,6 +110,20 @@ def _encode_state(state: StoredState) -> dict[str, Any]:
         "cut_rules": {
             m: r for m, r in state.cut_rules.items() if m in state.plans
         },
+        "base_lots": {
+            m: str(lot) for m, lot in state.base_lots.items()
+            if m in state.plans
+        },
+        "depths": {
+            m: {side: str(depth) for side, depth in sides.items()}
+            for m, sides in state.depths.items()
+            if m in state.plans and sides
+        },
+        "tp_targets": {
+            m: {side: str(price) for side, price in sides.items()}
+            for m, sides in state.tp_targets.items()
+            if m in state.plans and sides
+        },
     }
 
 
@@ -137,6 +160,51 @@ def _decode_state(raw: Any) -> StoredState:
             or not isinstance(rule.get("first"), int)
         ):
             raise ValueError("Invalid cut loss rule.")
+    targets_raw = raw.get("tp_targets", {})
+    if not isinstance(targets_raw, dict):
+        raise ValueError("Invalid TP targets.")
+    targets: dict[str, dict[str, Decimal]] = {}
+    for message_id, sides in targets_raw.items():
+        if message_id not in plans:
+            continue
+        if not isinstance(sides, dict):
+            raise ValueError("Invalid TP targets.")
+        decoded: dict[str, Decimal] = {}
+        for side, price in sides.items():
+            value = Decimal(price)  # InvalidOperation is an ArithmeticError
+            if side not in ("BUY", "SELL") or not value.is_finite() or value <= 0:
+                raise ValueError("Invalid TP target.")
+            decoded[side] = value
+        if decoded:
+            targets[message_id] = decoded
+    depths_raw = raw.get("depths", {})
+    if not isinstance(depths_raw, dict):
+        raise ValueError("Invalid depths.")
+    depths: dict[str, dict[str, Decimal]] = {}
+    for message_id, sides in depths_raw.items():
+        if message_id not in plans:
+            continue
+        if not isinstance(sides, dict):
+            raise ValueError("Invalid depths.")
+        decoded_depths: dict[str, Decimal] = {}
+        for side, depth in sides.items():
+            value = Decimal(depth)
+            if (side not in ("BUY", "SELL") or not value.is_finite()
+                    or not 0 <= value <= 100):
+                raise ValueError("Invalid depth.")
+            decoded_depths[side] = value
+        if decoded_depths:
+            depths[message_id] = decoded_depths
+    lots_raw = raw.get("base_lots", {})
+    if not isinstance(lots_raw, dict):
+        raise ValueError("Invalid base lots.")
+    base_lots: dict[str, Decimal] = {}
+    for message_id, lot in lots_raw.items():
+        value = Decimal(lot)
+        if not value.is_finite() or value <= 0:
+            raise ValueError("Invalid base lot.")
+        if message_id in plans:
+            base_lots[message_id] = value
     return StoredState(
         current_message_id=current,
         plans=plans,
@@ -146,6 +214,9 @@ def _decode_state(raw: Any) -> StoredState:
             m: {"tf": r["tf"], "first": r["first"]}
             for m, r in rules.items() if m in plans
         },
+        tp_targets=targets,
+        depths=depths,
+        base_lots=base_lots,
     )
 
 

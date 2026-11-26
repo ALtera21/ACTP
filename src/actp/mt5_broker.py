@@ -23,11 +23,13 @@ without a terminal. In real use leave it as None.
 """
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
 from actp.broker import (
+    BrokerError,
     BrokerOrder,
     BrokerRejected,
     BrokerUnavailable,
@@ -76,6 +78,12 @@ _REFUSED = {
 }
 
 _CLIENT_ID = re.compile(r"^[^:\s]+:\d+$")
+
+
+# How many close / cancel requests may be on their way to MetaTrader at the
+# same time when a whole batch is sent (Close all, Kill all, Cancel orders...).
+# Set to 1 to send them strictly one after the other.
+RELEASE_WORKERS = 8
 
 
 class Mt5Broker:
@@ -335,6 +343,96 @@ class Mt5Broker:
             },
             "close_position",
         )
+
+    def release_many(self, orders: list[Any]) -> list[BrokerError | None]:
+        """Cancel the pending orders and close the filled orders in `orders`
+        (BrokerOrder objects) in one batch, much faster than one by one:
+        MT5 is read once, every request is prepared first and then they are
+        sent together. Returns one entry per order, in the same order: None
+        when it is done (or already gone), else the error."""
+        if not orders:
+            return []
+        m = self._mt5
+        try:
+            positions = m.positions_get()
+            pendings = m.orders_get()
+        except Exception as exc:
+            raise BrokerUnavailable(f"read before closing failed: {exc}") from exc
+        if positions is None or pendings is None:
+            raise self._fail("positions_get/orders_get")
+        open_positions = {str(p.ticket): p for p in positions
+                          if p.magic == self._magic}
+        open_pendings = {str(o.ticket) for o in pendings
+                         if o.magic == self._magic}
+        ticks: dict[str, Any] = {}
+        fillings: dict[str, int] = {}
+        jobs: list[tuple[int, dict[str, Any], str]] = []
+        results: list[BrokerError | None] = [None] * len(orders)
+        for index, order in enumerate(orders):
+            try:
+                if order.status == OrderStatus.PENDING:
+                    if order.ticket not in open_pendings:
+                        continue  # already gone
+                    jobs.append((index, {"action": TRADE_ACTION_REMOVE,
+                                         "order": int(order.ticket)},
+                                 "cancel_pending"))
+                    continue
+                position = open_positions.get(order.ticket)
+                if position is None:
+                    continue  # already closed (TP, SL or by hand)
+                symbol = position.symbol
+                if symbol not in ticks:
+                    raw = m.symbol_info_tick(symbol)
+                    if raw is None:
+                        raise self._fail(f"tick for {symbol}")
+                    ticks[symbol] = raw
+                    fillings[symbol] = self._market_filling(symbol)
+                raw = ticks[symbol]
+                if position.type == m.ORDER_TYPE_BUY:
+                    close_type, price = m.ORDER_TYPE_SELL, raw.bid
+                elif position.type == m.ORDER_TYPE_SELL:
+                    close_type, price = m.ORDER_TYPE_BUY, raw.ask
+                else:
+                    raise BrokerUnavailable(
+                        f"Unexpected position type {position.type}.")
+                if price <= 0:
+                    raise BrokerUnavailable(f"Invalid close price {price}.")
+                jobs.append((index, {
+                    "action": TRADE_ACTION_DEAL,
+                    "symbol": symbol,
+                    "volume": position.volume,
+                    "type": close_type,
+                    "position": int(order.ticket),
+                    "price": round(price, self._digits_for(symbol)),
+                    "deviation": self._close_deviation,
+                    "magic": self._magic,
+                    "comment": "actp close",
+                    "type_time": ORDER_TIME_GTC,
+                    "type_filling": fillings[symbol],
+                }, "close_position"))
+            except BrokerError as exc:
+                results[index] = exc
+
+        def send(job: tuple[int, dict[str, Any], str]) -> BrokerError | None:
+            _, payload, what = job
+            try:
+                self._send(payload, what)
+            except BrokerError as exc:
+                return exc
+            return None
+
+        # Pending orders go first so none of them can fill while the
+        # positions are being closed.
+        for group in ([j for j in jobs if j[2] == "cancel_pending"],
+                      [j for j in jobs if j[2] == "close_position"]):
+            if RELEASE_WORKERS > 1 and len(group) > 1:
+                with ThreadPoolExecutor(max_workers=RELEASE_WORKERS) as pool:
+                    sent = list(pool.map(send, group))
+            else:
+                sent = [send(job) for job in group]
+            for (index, _, _), outcome in zip(group, sent):
+                results[index] = outcome
+        return results
 
     def _market_filling(self, symbol: str) -> int:
         """Pick a filling mode the symbol allows for market deals."""

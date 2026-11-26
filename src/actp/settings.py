@@ -40,7 +40,17 @@ DEFAULTS: dict[str, Any] = {
     # "light" or "dark" (the sun / moon button on the main window).
     "theme": "light",
     # The Auto-TP tick box on the main window (remembered between runs).
-    "auto_tp": False,
+    "auto_tp": True,
+    # "Update TP also changes pending orders" tick box (main window).
+    "tp_include_pending": True,
+    # Auto-TP moves the TP once this much of a side is filled (percent).
+    "auto_tp_percent": "100",
+    # Auto-TP overrides a TP set by hand (button or dragged in MetaTrader).
+    "auto_tp_priority": True,
+    # Auto-remove: a plan side with no open position whose price already went
+    # this far into its range loses its leftover pending orders.
+    "auto_remove": False,
+    "auto_remove_percent": "90",
 }
 
 _SYMBOL = re.compile(r"[A-Za-z0-9._#+\-]{3,24}")
@@ -120,6 +130,20 @@ def validate(raw: Any) -> dict[str, Any]:
     out["confirm"] = _confirm_validate(out["confirm"])
     if not isinstance(out["auto_tp"], bool):
         raise ValueError("Auto-TP must be true or false.")
+    percent = _dec(out["auto_tp_percent"], "Auto-TP percent")
+    if not 1 <= percent <= 100:
+        raise ValueError("Auto-TP percent must be from 1 to 100.")
+    out["auto_tp_percent"] = format(percent.normalize(), "f")
+    if not isinstance(out["auto_remove"], bool):
+        raise ValueError("Auto-remove must be true or false.")
+    remove_pct = _dec(out["auto_remove_percent"], "Auto-remove percent")
+    if not 1 <= remove_pct <= 100:
+        raise ValueError("Auto-remove percent must be from 1 to 100.")
+    out["auto_remove_percent"] = format(remove_pct.normalize(), "f")
+    if not isinstance(out["auto_tp_priority"], bool):
+        raise ValueError("The Auto-TP priority choice must be true or false.")
+    if not isinstance(out["tp_include_pending"], bool):
+        raise ValueError("The Update TP pending-orders choice must be true or false.")
     if out["theme"] not in ("light", "dark"):
         raise ValueError("Theme must be light or dark.")
     if out["language"] not in ("en", "id"):

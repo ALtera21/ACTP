@@ -20,6 +20,8 @@ ACTIONS: dict[str, str] = {
     "close_profitable": "Close profitable only",
     "close_plan_side": "Plan table: cancel PO + close one side",
     "close_plan": "Plan table: cancel entire plan",
+    "reenter": "Plan table: re-entry (refresh one side of a plan)",
+    "tp_past": "Plan table: Update TP when the price is already past it",
     "quit": "Quit ACTP",
 }
 
